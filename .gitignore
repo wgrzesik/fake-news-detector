@@ -1,0 +1,13 @@
+# Python and compilation
+__pycache__/
+*.pyc
+.vscode/
+
+# Datasets (heavy files)
+/research/data/*
+
+# Trained Models (heavy files)
+/saved_models/*
+
+# Results
+results_*.csv
