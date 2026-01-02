@@ -64,7 +64,7 @@ To train models and generate benchmark results:
 2. Configure the MODELS_TO_TRAIN and DATASETS lists.
 3. Run the script:
 ```bash
-python main.py
+python -m research.main
 ```
 
 This will: 
