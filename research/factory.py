@@ -3,7 +3,6 @@ from research.base import BaseFakeNewsModel
 from research.models import SVMModel, LogisticRegressionModel, NaiveBayesModel, MultinomialNaiveBayesModel
 
 class ModelFactory:
-    
     MODEL_REGISTRY = {
         'svm': SVMModel,
         'lr': LogisticRegressionModel,

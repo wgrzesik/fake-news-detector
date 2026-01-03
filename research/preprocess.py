@@ -14,11 +14,11 @@ RAW_BASE = os.path.join("research", "data", "raw")
 PROCESSED_BASE = os.path.join("research", "data", "processed")
 
 def load_and_standardize(dataset, path):
-    print(f"[{dataset}] Ładowanie i wstępne czyszczenie")
+    print(f"[{dataset}] Loading and initial cleaning")
     file_path = os.path.join(path, "data.csv")
     
     if not os.path.exists(file_path):
-        print(f"Nie znaleziono pliku {file_path}")
+        print(f"File not found: {file_path}")
         return pd.DataFrame()
 
     df = pd.read_csv(file_path)
@@ -35,7 +35,7 @@ def load_and_standardize(dataset, path):
     
     initial_len = len(df)
     df.drop_duplicates(subset=['text'], inplace=True)
-    print(f"[{dataset}] Usunięto {initial_len - len(df)} wewnętrznych duplikatów.")
+    print(f"[{dataset}] Removed {initial_len - len(df)} internal duplicates.")
 
     return df[["text", "label"]]
 
@@ -51,13 +51,12 @@ def prepare_dataset(name):
     train, temp = train_test_split(df, test_size=0.2, stratify=df["label"], random_state=42)
     val, test = train_test_split(temp, test_size=0.5, stratify=temp["label"], random_state=42)
 
-    print(f"[{name}] Sprawdzanie wycieku danych ")
+    print(f"[{name}] Checking for data leakage")
     
     train_texts_set = set(train["text"])
 
     def remove_leakage(subset_df):
         clean_df = subset_df[~subset_df["text"].isin(train_texts_set)]
-
         return clean_df
 
     val = remove_leakage(val)
@@ -69,13 +68,13 @@ def prepare_dataset(name):
     train_res = pd.DataFrame(X_train_res, columns=["text"])
     train_res["label"] = y_train_res
 
-    print(f"[{name}] Gotowe wymiary: Train={len(train_res)}, Val={len(val)}, Test={len(test)}")
+    print(f"[{name}] Final sizes: Train={len(train_res)}, Val={len(val)}, Test={len(test)}")
     
     overlap = set(train_res["text"]).intersection(set(test["text"]))
     if len(overlap) > 0:
-        print(f"Wykryto {len(overlap)} wspólnych tekstów!")
+        print(f"Detected {len(overlap)} overlapping texts!")
     else:
-        print(f"[{name}] Brak wycieku danych.")
+        print(f"[{name}] No data leakage.")
 
     train_res.to_csv(os.path.join(out_path, "train.csv"), index=False)
     val.to_csv(os.path.join(out_path, "val.csv"), index=False)
