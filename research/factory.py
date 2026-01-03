@@ -1,15 +1,14 @@
 from typing import List
 from research.base import BaseFakeNewsModel
-from research.models import SVMModel, LogisticRegressionModel
+from research.models import SVMModel, LogisticRegressionModel, NaiveBayesModel, MultinomialNaiveBayesModel
 
 class ModelFactory:
     
     MODEL_REGISTRY = {
         'svm': SVMModel,
         'lr': LogisticRegressionModel,
-        # 'lstm': LSTMModel,
-        # 'bert': BertModel, 
-        # 'roberta': RobertaModel
+        'nb': NaiveBayesModel,
+        'mnb': MultinomialNaiveBayesModel,
     }
 
     # Compatibility map: Model Type -> List of allowed embedding types
@@ -17,6 +16,8 @@ class ModelFactory:
         # ML Models
         'svm': ['tfidf', 'word2vec', 'glove'], 
         'lr': ['tfidf', 'word2vec', 'glove'],
+        'nb': ['word2vec', 'glove'],
+        'mnb': ['tfidf', 'bow'],
         
         # DL Models
         'lstm': ['word2vec', 'glove', 'fasttext'],

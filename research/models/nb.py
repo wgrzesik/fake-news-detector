@@ -1,24 +1,24 @@
 import os
 import joblib
 import numpy as np
-from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, confusion_matrix
 from research.base import BaseFakeNewsModel
 from research.embeddings.base_embedding import BaseEmbedder 
 
-class LogisticRegressionModel(BaseFakeNewsModel):
+class NaiveBayesModel(BaseFakeNewsModel):
     def __init__(self, dataset_name: str, embedding_type: str):
-        super().__init__(dataset_name, f"lr_{embedding_type}")
-        
+        super().__init__(dataset_name, f"nb_{embedding_type}")
+
         self.embedding_type = embedding_type
         self.dataset_name = dataset_name
         self.embedder = BaseEmbedder.create(embedding_type)
-        self.classifier = LogisticRegression(max_iter=1000, solver='lbfgs', random_state=42)
-        self.scaler = StandardScaler(with_mean=False)
+        self.classifier = GaussianNB()
+        self.scaler = StandardScaler()
 
     def train(self, X_train, y_train, X_val=None, y_val=None):
-        print(f"Starting LR Training ({self.embedding_type}) for {self.dataset_name} ---")
+        print(f"Starting NB Training ({self.embedding_type}) for {self.dataset_name}")
         
         X_train_vec = self.embedder.fit_transform(X_train)
         X_train_scaled = self.scaler.fit_transform(X_train_vec)
@@ -26,14 +26,14 @@ class LogisticRegressionModel(BaseFakeNewsModel):
         y_train = np.array(y_train).astype(int)
         
         print(f"Class distribution in training: {np.unique(y_train, return_counts=True)}")
-        print("Fitting Logistic Regression model...")
+        print("Fitting Naive Bayes model...")
         
         self.classifier.fit(X_train_scaled, y_train)
         print("Training completed successfully.")
 
     def evaluate(self, X_test, y_test):
         print(f"Evaluating model: {self.model_name}")
-  
+        
         X_test_vec = self.embedder.transform(X_test)
         X_test_scaled = self.scaler.transform(X_test_vec)
         
@@ -42,9 +42,8 @@ class LogisticRegressionModel(BaseFakeNewsModel):
         y_test_idx = np.array(y_test).astype(int)
         y_pred_idx = np.array(y_pred).astype(int)
 
-        print("Confusion Matrix (Rows: True, Cols: Predicted):")
-        cm = confusion_matrix(y_test_idx, y_pred_idx)
-        print(cm)
+        print("Confusion Matrix:")
+        print(confusion_matrix(y_test_idx, y_pred_idx))
 
         metrics = {
             "accuracy": accuracy_score(y_test_idx, y_pred_idx),
@@ -82,7 +81,6 @@ class LogisticRegressionModel(BaseFakeNewsModel):
         joblib.dump(self.classifier, os.path.join(save_path, "classifier.joblib"))
         joblib.dump(self.scaler, os.path.join(save_path, "scaler.joblib"))
         self.embedder.save(os.path.join(save_path, "embedder.pkl"))
-        
         print(f"Model saved at: {save_path}")
 
     def load(self):

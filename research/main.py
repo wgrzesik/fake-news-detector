@@ -2,43 +2,42 @@ import os
 import pandas as pd
 from datetime import datetime
 import traceback
-from factory import ModelFactory
+from research.factory import ModelFactory
 
 DATASETS = ['ISOT', 'LIAR', 'WELFake']
 
 ALL_MODELS_TO_TEST = [
     'svm', 
-    'lr'
+    'lr',
+    'nb',
+    'mnb'
 ]
 
 ALL_EMBEDDINGS_TO_TEST = [
     'tfidf', 
-    'word2vec'
+    'word2vec',
+    'glove',
+    'bow'
 ]
 
 BASE_DATA_DIR = os.path.join('research', 'data', 'processed')
 
 def load_data(dataset_name: str, split_type: str):
     """
-    Loads data from folder: data/processed/{dataset_name}/{split_type}/
-    Returns: list of texts and list of labels.
+    Loads data from specific file: data/processed/{dataset_name}/{split_type}.csv
     """
-    path = os.path.join(BASE_DATA_DIR, dataset_name)
+    file_name = f"{split_type}.csv"
+    file_path = os.path.join(BASE_DATA_DIR, dataset_name, file_name)
+
     try:
-        if not os.path.exists(path):
-            print(f"! Directory does not exist: {path}")
+        if not os.path.exists(file_path):
+            print(f"! File does not exist: {file_path}")
             return [], []
 
-        files = [f for f in os.listdir(path) if f.endswith('.csv')]
-        if not files: 
-            print(f"! No .csv files found in: {path}")
-            return [], []
-        
-        file_path = os.path.join(path, files[0])
         df = pd.read_csv(file_path)
         
         if 'text' not in df.columns or 'label' not in df.columns:
-            print(f"! File {files[0]} is missing required columns: 'text' and 'label'")
+            print(f"! File {file_name} is missing columns: 'text' and 'label'")
             return [], []
 
         df = df.dropna(subset=['text', 'label'])
@@ -46,11 +45,11 @@ def load_data(dataset_name: str, split_type: str):
         texts = df['text'].astype(str).tolist()
         labels = df['label'].tolist()
         
-        print(f"Loaded {len(texts)} rows from {dataset_name}/{split_type}")
+        print(f"Loaded {len(texts)} rows from {dataset_name}/{file_name}")
         return texts, labels
         
     except Exception as e:
-        print(f"! Error during data loading: {e}")
+        print(f"! Error loading {file_path}: {e}")
         return [], []
 
 def run_benchmark():
@@ -93,7 +92,7 @@ def run_benchmark():
                     start_time = datetime.now()
                     model.train(X_train, y_train)
                     duration = (datetime.now() - start_time).total_seconds()
-     
+
                     metrics = model.evaluate(X_test, y_test)
                     model.save()
                     

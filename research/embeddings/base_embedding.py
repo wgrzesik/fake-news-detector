@@ -3,6 +3,7 @@ from typing import List, Any, Union
 import re
 from string import punctuation
 
+
 class BaseEmbedder(ABC):
     """
     Abstract base class for all vectorization methods (TF-IDF, GloVe, BERT, etc.).
@@ -11,6 +12,30 @@ class BaseEmbedder(ABC):
     def __init__(self, model_name: str):
         self.model_name = model_name
         self.is_fitted = False
+    
+    @staticmethod
+    def create(embedding_type: str, **kwargs):
+        """
+        Factory method integrated into the Base class.
+        Uses local imports to prevent circular dependency errors.
+        """
+        if embedding_type == 'tfidf':
+            from .tfidf import TfidfEmbedder
+            return TfidfEmbedder(**kwargs)
+            
+        elif embedding_type == 'word2vec':
+            from .word2vec import Word2VecEmbedder
+            return Word2VecEmbedder(**kwargs)
+            
+        elif embedding_type == 'glove':
+            from .glove import GloveEmbedder
+            return GloveEmbedder(**kwargs)
+            
+        elif embedding_type == 'bow':
+            from .bow import BowEmbedder
+            return BowEmbedder(**kwargs)
+            
+        raise ValueError(f"Unknown embedding type: {embedding_type}")
     
     def _clean_text(self, text: str) -> str:
         """

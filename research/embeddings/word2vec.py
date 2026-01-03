@@ -6,23 +6,20 @@ from gensim.utils import simple_preprocess
 from .base_embedding import BaseEmbedder
 
 class Word2VecEmbedder(BaseEmbedder):
-    def __init__(self, vector_size: int = 100, window: int = 5, min_count: int = 1):
+    def __init__(self, vector_size: int = 100, window: int = 5, min_count: int = 1, model_path = None):
         super().__init__("word2vec")
         self.vector_size = vector_size
         self.window = window
         self.min_count = min_count
         self.model = None
+        self.model_path = model_path
 
     def _tokenize(self, texts: List[str]) -> List[List[str]]:
-        """
-        First cleans the text using the BaseEmbedder method,
-        then splits it into tokens.
-        """
         clean_texts = self._preprocess_batch(texts)
         return [simple_preprocess(text) for text in clean_texts]
 
     def fit(self, texts: List[str]) -> None:
-        print("   [Word2Vec] Cleaning and training...")
+        print("[Word2Vec] Cleaning and training...")
         tokenized_texts = self._tokenize(texts)
         
         self.model = Word2Vec(
@@ -58,10 +55,10 @@ class Word2VecEmbedder(BaseEmbedder):
                 
         return np.array(embeddings)
 
-    def save(self, path: str) -> None:
+    def save(self, path: str):
         self.model.save(path)
 
-    def load(self, path: str) -> None:
+    def load(self, path: str):
         if not os.path.exists(path):
             raise FileNotFoundError(f"Model file missing: {path}")
         self.model = Word2Vec.load(path)

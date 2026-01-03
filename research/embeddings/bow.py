@@ -1,22 +1,22 @@
 import pickle
 import os
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import CountVectorizer
 from .base_embedding import BaseEmbedder
 
-class TfidfEmbedder(BaseEmbedder):
+class BowEmbedder(BaseEmbedder):
     def __init__(self, max_features: int = 5000):
-        super().__init__("tfidf")
-        self.vectorizer = TfidfVectorizer(max_features=max_features, stop_words='english')
+        super().__init__("bow")
+        self.vectorizer = CountVectorizer(max_features=max_features, stop_words='english')
 
     def fit(self, texts):
-        print("[TF-IDF] Cleaning data and training...")
+        print("[BoW] Cleaning data and fitting vectorizer...")
         clean_texts = self._preprocess_batch(texts)
         self.vectorizer.fit(clean_texts)
         self.is_fitted = True
 
     def transform(self, text):
         if not self.is_fitted:
-            raise ValueError("Vectorizer has not been fitted yet!")
+            raise ValueError("BoW Vectorizer has not been fitted yet!")
             
         if isinstance(text, str):
             text = [text]
@@ -30,7 +30,7 @@ class TfidfEmbedder(BaseEmbedder):
 
     def load(self, path: str):
         if not os.path.exists(path):
-            raise FileNotFoundError(f"File not found: {path}")
+            raise FileNotFoundError(f"BoW file not found: {path}")
         with open(path, 'rb') as f:
             self.vectorizer = pickle.load(f)
         self.is_fitted = True

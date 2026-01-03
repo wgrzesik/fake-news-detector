@@ -4,26 +4,17 @@ import numpy as np
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, confusion_matrix
-from research.base import BaseFakeNewsModel 
+from research.base import BaseFakeNewsModel
+from research.embeddings.base_embedding import BaseEmbedder 
 
 class SVMModel(BaseFakeNewsModel):
-    def __init__(self, dataset_name: str, embedding_type: str):
+    def __init__(self, dataset_name: str, embedding_type: str, **kwargs):
         super().__init__(dataset_name, f"svm_{embedding_type}")
-        
+
         self.embedding_type = embedding_type
         self.dataset_name = dataset_name
-        
-        if embedding_type == 'tfidf':
-            from research.embeddings.tfidf import TfidfEmbedder
-            self.embedder = TfidfEmbedder()
-        elif embedding_type == 'word2vec':
-            from research.embeddings.word2vec import Word2VecEmbedder
-            self.embedder = Word2VecEmbedder()
-        else:
-            raise NotImplementedError(f"Embedding {embedding_type} is not supported")
-            
+        self.embedder = BaseEmbedder.create(embedding_type, **kwargs)
         self.classifier = SVC(kernel='linear', probability=True, random_state=42)
-
         self.scaler = StandardScaler(with_mean=False)
 
     def train(self, X_train, y_train, X_val=None, y_val=None):
