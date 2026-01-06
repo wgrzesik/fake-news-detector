@@ -8,3 +8,4 @@ gensim
 joblib
 imbalanced-learn
 nltk
+xgboost
