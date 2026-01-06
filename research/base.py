@@ -8,11 +8,12 @@ from research.embeddings.base_embedding import BaseEmbedder
 
 class BaseFakeNewsModel(ABC):
     def __init__(self, dataset_name: str, model_name: str):
+
         self.dataset_name = dataset_name
         self.model_name = model_name
-        
         self.embedder: BaseEmbedder = None
         self.classifier = None 
+        self.scaler = None
 
     def get_model_path(self) -> str:
         """Centralized path management for saving/loading"""
@@ -23,6 +24,10 @@ class BaseFakeNewsModel(ABC):
         """Full pipeline: Clean -> Vectorize -> Fit"""
         print(f"Training {self.model_name} (Standard Path)")
         X_vec = self.embedder.fit_transform(X_train_raw)
+
+        if self.scaler:
+            X_vec = self.scaler.fit_transform(X_vec)
+
         self.classifier.fit(X_vec, y_train)
 
     def evaluate(self, X_test_raw: List[str], y_test: List[int]) -> Dict[str, float]:
@@ -59,6 +64,9 @@ class BaseFakeNewsModel(ABC):
             raise ValueError("Model not loaded or trained.")
 
         vec = self.embedder.transform([text])
+
+        if self.scaler:
+            vec = self.scaler.transform(vec)
         
         prediction = int(self.classifier.predict(vec)[0])
         
@@ -83,6 +91,9 @@ class BaseFakeNewsModel(ABC):
         os.makedirs(base_path, exist_ok=True)
         
         joblib.dump(self.classifier, os.path.join(base_path, "classifier.joblib"))
+
+        if self.scaler:
+            joblib.dump(self.scaler, os.path.join(base_path, "scaler.joblib"))
         
         self.embedder.save(os.path.join(base_path, "embedder.pkl"))
         print(f"\nModel saved at: {base_path}")
@@ -92,5 +103,12 @@ class BaseFakeNewsModel(ABC):
         base_path = self.get_model_path()
         
         self.classifier = joblib.load(os.path.join(base_path, "classifier.joblib"))
+
+        scaler_path = os.path.join(base_path, "scaler.joblib")
+        if os.path.exists(scaler_path):
+            self.scaler = joblib.load(scaler_path)
+        else:
+            self.scaler = None
+
         self.embedder.load(os.path.join(base_path, "embedder.pkl"))
         print(f"Model loaded from: {base_path}")

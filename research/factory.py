@@ -1,6 +1,7 @@
 from typing import List
 from research.base import BaseFakeNewsModel
-from research.models import SVMModel, LogisticRegressionModel, NaiveBayesModel, MultinomialNaiveBayesModel
+from research.models import SVMModel, LogisticRegressionModel, NaiveBayesModel, MultinomialNaiveBayesModel, KNNModel, RandomForestModel, DecisionTreeModel
+from research.models.xgb import XGBoostModel
 
 class ModelFactory:
     MODEL_REGISTRY = {
@@ -8,6 +9,10 @@ class ModelFactory:
         'lr': LogisticRegressionModel,
         'nb': NaiveBayesModel,
         'mnb': MultinomialNaiveBayesModel,
+        'knn': KNNModel,
+        'rf': RandomForestModel,
+        'dt': DecisionTreeModel,
+        'xgb': XGBoostModel,
     }
 
     # Compatibility map: Model Type -> List of allowed embedding types
@@ -17,6 +22,12 @@ class ModelFactory:
         'lr': ['tfidf', 'word2vec', 'glove'],
         'nb': ['word2vec', 'glove'],
         'mnb': ['tfidf', 'bow'],
+
+        'knn': ['word2vec', 'glove', 'bow'],
+        'rf':  ['tfidf', 'word2vec', 'glove', 'bow'],
+        'dt':  ['tfidf', 'word2vec', 'glove', 'bow'],
+
+        'xgb': ['tfidf', 'bow'],
         
         # DL Models
         'lstm': ['word2vec', 'glove', 'fasttext'],
