@@ -36,11 +36,11 @@ def load_all_required_models():
     These models are pre-trained on different datasets and optimized for different text lengths.
     """
     configs = {
-        "short_text": {"dataset": "LIAR", "type": "lr", "emb": "tfidf"},
+        "short_text": {"dataset": "LIAR", "type": "lr", "emb": "word2vec"},
         
         "long_article": {"dataset": "ISOT", "type": "svm", "emb": "tfidf"},
         
-        "general": {"dataset": "WELFake", "type": "svm", "emb": "word2vec"}
+        "general": {"dataset": "WELFake", "type": "xgb", "emb": "tfidf"}
     }
 
     for key, cfg in configs.items():
