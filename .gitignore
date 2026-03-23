@@ -1,13 +1,26 @@
-# Python and compilation
+# Python
 __pycache__/
 *.pyc
+
+# IDE
+.idea/
 .vscode/
 
-# Datasets (heavy files)
-/research/data/*
+# Virtual env
+venv/
 
-# Trained Models (heavy files)
-/saved_models/*
+# Data (IMPORTANT)
+research/configs/datasets/
+*.csv
+*.bin
+*.txt
 
-# Results
-results_*.csv
+# ML stuff
+saved_models/
+mlruns/
+outputs/
+multirun/
+.hydra/
+
+mlflow.db
+optuna.db
