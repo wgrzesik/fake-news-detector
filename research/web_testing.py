@@ -71,9 +71,6 @@ class WebTestEvaluator:
                 'f1_score': round(metrics['f1_score'], 4),
                 'run_id': run_id,
                 'timestamp': datetime.now().isoformat(),
-                'predictions': y_pred,
-                'probabilities': y_probs,
-                'ground_truth': y_web
             }
 
             return results
@@ -98,7 +95,6 @@ class WebTestEvaluator:
 
         for config in models_config:
             model_name = config['model_name']
-            model_path = config['model_path']
 
             try:
                 # Load model
@@ -135,6 +131,7 @@ class WebTestEvaluator:
         results_df.to_csv(
             filepath,
             mode='a',
+            header=not file_exists,
             index=False,
         )
         print(f"Saved to {filepath}")

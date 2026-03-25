@@ -1,4 +1,4 @@
-# research/results_manager.py
+# research/result_manager.py
 import os
 import json
 import pandas as pd
@@ -6,7 +6,6 @@ import numpy as np
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-import mlflow
 
 
 class ResultsManager:
@@ -84,7 +83,7 @@ class ResultsManager:
             best_trial: Optional[int] = None,
             run_id: str = None,
             hyperparams: Optional[Dict] = None
-    ) -> None:
+    ) -> dict:
         """Save metrics with full experiment metadata"""
         exp_key = self.get_experiment_key(dataset, model, embedding, preprocessing)
 

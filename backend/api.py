@@ -13,7 +13,7 @@ os.chdir(project_root)
 
 try:
     from research.configs.models.model_factory import ModelFactory
-    from research.configs.models.base_model import BaseModel
+    from research.configs.models.base_model import BaseModel as ResearchBaseModel
 except ImportError as e:
     print("IMPORT ERROR: Could not find files in the /research folder.")
     raise e
@@ -45,7 +45,7 @@ def load_all_required_models():
 
     for key, cfg in configs.items():
         try:
-            print(f"Loading models for category: {key} ({cfg['datasets']})...")
+            print(f"Loading model for category: {key} ({cfg['datasets']})...")
             model = ModelFactory.get_model(cfg['datasets'], cfg['type'], cfg['emb'])
             model.load()
             MODELS[key] = model
@@ -58,7 +58,7 @@ load_all_required_models()
 class TextRequest(BaseModel):
     text: str
 
-def select_best_model(text: str) -> BaseModel:
+def select_best_model(text: str) -> ResearchBaseModel:
     """
     Decision logic: which models best handles this specific text?
     """
@@ -84,7 +84,7 @@ def predict(request: TextRequest):
     model = select_best_model(raw_text)
     
     if not model:
-        raise HTTPException(status_code=500, detail="Failed to select a models.")
+        raise HTTPException(status_code=500, detail="Failed to select a model.")
 
     try:
         result = model.predict(raw_text)

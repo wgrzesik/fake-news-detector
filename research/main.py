@@ -104,18 +104,22 @@ def run_benchmark() -> None:
                         model.train_on_vectors(X_train_vec, y_train)
                         train_time = (datetime.now() - t_train).total_seconds()
 
+                        t_infer = datetime.now()
                         metrics = model.evaluate_on_vectors(X_test_vec, y_test)
+                        inference_time = (datetime.now() - t_infer).total_seconds()
                         model.save()
 
                         dataset_results.append({
                             "dataset": dataset,
                             "model": model_type,
                             "embedding": embedding_type,
+                            "preprocessing": "none",
                             "accuracy": round(metrics["accuracy"], 4),
                             "precision": round(metrics["precision"], 4),
                             "recall": round(metrics["recall"], 4),
-                            "f1": round(metrics["f1_score"], 4),
+                            "f1_score": round(metrics["f1_score"], 4),
                             "train_time_sec": round(train_time, 2),
+                            "inference_time_sec": round(inference_time, 4),
                             "timestamp": datetime.now().isoformat()
                         })
 
@@ -130,11 +134,14 @@ def run_benchmark() -> None:
                 traceback.print_exc()
 
         if dataset_results:
-            out_file = f"results_{dataset}.csv"
+            out_dir = os.path.join("experiments", "results")
+            os.makedirs(out_dir, exist_ok=True)
+            out_file = os.path.join(out_dir, f"benchmark_{dataset}.csv")
+            file_exists = os.path.exists(out_file)
             pd.DataFrame(dataset_results).to_csv(
                 out_file,
                 mode="a",
-                header=not os.path.exists(out_file),
+                header=not file_exists,
                 index=False
             )
             print(f"[Saved] {len(dataset_results)} → {out_file}")

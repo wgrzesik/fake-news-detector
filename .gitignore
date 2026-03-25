@@ -1,19 +1,28 @@
 # Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
 
 # IDE
 .idea/
 .vscode/
+*.swp
 
-# Virtual env
+# Virtual envs
 venv/
+.venv/
+env/
 
 # Data (IMPORTANT)
 research/configs/datasets/
-*.csv
+research/data/
 *.bin
-*.txt
 
 # ML stuff
 saved_models/
@@ -24,3 +33,21 @@ multirun/
 
 mlflow.db
 optuna.db
+
+# MLflow
+experiments/mlruns/
+
+# Hydra outputs
+outputs/
+.hydra/
+
+# Experiment outputs (keep directory skeleton, ignore data)
+experiments/results/*.csv
+experiments/web_test_results/*.csv
+experiments/web_test_results/*.txt
+experiments/predictions/**/*.csv
+experiments/metrics/*.csv
+experiments/hyperparams/**/*.json
+experiments/trial_history/**/*.csv
+experiments/plots/**/*.png
+experiments/plots/**/*.pdf

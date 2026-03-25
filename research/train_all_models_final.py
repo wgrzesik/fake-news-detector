@@ -331,7 +331,6 @@ def main(cfg: DictConfig):
                             embedding_type=embedding_name,
                             **final_model_params
                         )
-                        #final_model.embedder = embedder.clone()
                         final_model.embedder = copy.deepcopy(embedder)
 
                         # Train
