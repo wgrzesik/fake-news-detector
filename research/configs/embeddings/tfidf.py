@@ -4,6 +4,8 @@ from .base_embedding import BaseEmbedder
 
 
 class TfidfEmbedder(BaseEmbedder):
+    """TF-IDF embedder using scikit-learn TfidfVectorizer."""
+
     def __init__(
         self,
         max_features=20000,

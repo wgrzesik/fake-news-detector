@@ -1,10 +1,11 @@
-import sys
 import os
+import sys
+from typing import Dict, Any
+
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, Any
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
@@ -51,7 +52,7 @@ def load_all_required_models():
             MODELS[key] = model
             print(f"Model {key} is ready.")
         except Exception as e:
-            print(f"! Failed to load models {key}: {e}")
+            print(f"! Failed to load model {key}: {e}")
 
 load_all_required_models()
 
@@ -60,7 +61,7 @@ class TextRequest(BaseModel):
 
 def select_best_model(text: str) -> ResearchBaseModel:
     """
-    Decision logic: which models best handles this specific text?
+    Decision logic: which model best handles this specific text?
     """
     word_count = len(text.split())
     

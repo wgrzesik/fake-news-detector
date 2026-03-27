@@ -13,10 +13,10 @@ from omegaconf import DictConfig, OmegaConf
 from optuna.samplers import TPESampler
 import copy
 
-from research.configs.embeddings.embedder_factory import EmbedderFactory
+from research.configs.embeddings.embedding_factory import EmbedderFactory
 from research.configs.models.model_factory import ModelFactory
 from research.configs.preprocessing.preprocessor import TextPreprocessor
-from research.tracking_manager import HybridTrackingManager
+from research.tracking.tracking_manager import HybridTrackingManager
 
 
 def set_seed(seed: int):
@@ -79,11 +79,19 @@ def suggest_model_params(trial: optuna.Trial, optuna_config: Dict):
     return params
 
 
-def validate_compatibility(model_name: str, embedding_name: str):
+def validate_compatibility(model_name: str, embedding_name: str, preprocessing_name: str = None):
     """Validate model-embedding-preprocessing compatibility"""
     if embedding_name not in ModelFactory.get_valid_embeddings_for_model(model_name):
         raise ValueError(
             f"Invalid embeddings '{embedding_name}' for model '{model_name}'"
+        )
+
+    expected_preprocessing = ModelFactory.get_preprocessing_for_model(model_name)
+    if preprocessing_name and preprocessing_name != expected_preprocessing:
+        print(
+            f"[Warning] Preprocessing override: config says '{preprocessing_name}', "
+            f"but PREPROCESSING_MAP requires '{expected_preprocessing}' for model '{model_name}'. "
+            f"Using '{expected_preprocessing}'."
         )
 
     return True
@@ -147,7 +155,6 @@ def run_single_trial(
                 **model_params
             )
 
-            #model.embedder = embedding_object.clone()
             model.embedder = copy.deepcopy(embedding_object)
 
             # Train
@@ -190,7 +197,7 @@ def main(cfg: DictConfig):
     datasets = cfg.get('datasets_list', [cfg.datasets.name])
     models_to_optimize = cfg.get('models_to_optimize', [cfg.models.name])
     embeddings_to_use = cfg.get('embeddings_to_use', [cfg.embeddings.name])
-    preprocessing_name = cfg.preprocessing.name
+    cfg_preprocessing_name = cfg.preprocessing.name  # fallback from config
 
     # Print header
     print_header(datasets, models_to_optimize, embeddings_to_use, cfg)
@@ -205,7 +212,7 @@ def main(cfg: DictConfig):
     )
     failed_experiments = []
 
-    # Main loop: Datasets -> Preprocessing -> Models -> Embeddings
+    # Main loop: Datasets -> Models -> Embeddings
     for dataset_idx, dataset_name in enumerate(datasets, 1):
         print(f"\n{'#'*100}")
         print(f"[{dataset_idx}/{len(datasets)}] DATASET: {dataset_name}")
@@ -224,31 +231,52 @@ def main(cfg: DictConfig):
         print(f"Train samples: {len(X_train_raw)}")
         print(f"Test samples: {len(X_test_raw)}")
 
-        # Preprocess once per dataset
-        print(f"[Preprocessing] {preprocessing_name.upper()}")
-        try:
-            t_prep = datetime.now()
-            X_train_preprocessed = preprocess_data(X_train_raw, preprocessing_name)
-            X_test_preprocessed = preprocess_data(X_test_raw, preprocessing_name)
-            prep_time = (datetime.now() - t_prep).total_seconds()
-            print(f"Preprocessing done ({prep_time:.2f}s)")
-        except Exception as e:
-            print(f"[ERROR] Preprocessing failed: {str(e)}")
-            failed_experiments.append((dataset_name, "N/A", "N/A", f"Preprocessing: {str(e)}"))
-            continue
+        # Cache preprocessed data per preprocessing mode (avoid re-processing)
+        preprocessing_cache_train = {}
+        preprocessing_cache_test = {}
 
         # Loop over models and embeddings
         for model_name in models_to_optimize:
+            # Resolve preprocessing mode for this model from PREPROCESSING_MAP
+            preprocessing_name = ModelFactory.get_preprocessing_for_model(
+                model_name, fallback=cfg_preprocessing_name
+            )
+
+            # Preprocess (with caching per mode)
+            if preprocessing_name not in preprocessing_cache_train:
+                print(f"\n[Preprocessing] {preprocessing_name.upper()} (for model '{model_name}')")
+                try:
+                    t_prep = datetime.now()
+                    preprocessing_cache_train[preprocessing_name] = preprocess_data(
+                        X_train_raw, preprocessing_name
+                    )
+                    preprocessing_cache_test[preprocessing_name] = preprocess_data(
+                        X_test_raw, preprocessing_name
+                    )
+                    prep_time = (datetime.now() - t_prep).total_seconds()
+                    print(f"Preprocessing done ({prep_time:.2f}s)")
+                except Exception as e:
+                    print(f"[ERROR] Preprocessing failed: {str(e)}")
+                    failed_experiments.append(
+                        (dataset_name, model_name, "N/A", f"Preprocessing: {str(e)}")
+                    )
+                    continue
+            else:
+                print(f"\n[Preprocessing] {preprocessing_name.upper()} (cached)")
+
+            X_train_preprocessed = preprocessing_cache_train[preprocessing_name]
+            X_test_preprocessed = preprocessing_cache_test[preprocessing_name]
+
             for embedding_name in embeddings_to_use:
                 experiment_count += 1
 
                 exp_id = f"[{experiment_count}/{total_combinations}]"
-                print(f"\n{exp_id} {dataset_name} | {model_name.upper()} | {embedding_name.upper()}")
+                print(f"\n{exp_id} {dataset_name.upper()} | {model_name.upper()} | {embedding_name.upper()}")
                 print("-" * 100)
 
                 try:
                     # Validate compatibility
-                    validate_compatibility(model_name, embedding_name)
+                    validate_compatibility(model_name, embedding_name, preprocessing_name)
 
                     print(f"[Embedding] {embedding_name}")
                     t_emb_start = datetime.now()
@@ -309,7 +337,6 @@ def main(cfg: DictConfig):
                         study.optimize(
                             objective,
                             n_trials=cfg.optuna.n_trials,
-                            n_jobs=cfg.optuna.n_jobs,
                             timeout=cfg.optuna.get('timeout', None),
                             show_progress_bar=False
                         )
@@ -441,7 +468,7 @@ def print_final_summary(tracking_mgr, failed_experiments, total_combinations):
 
     print(f"\n[Results Location]")
     print(f"MLflow UI: mlflow ui --backend-store-uri '{tracking_mgr.local_storage}/mlruns'")
-    print(f"Summary CSV: {tracking_mgr.metrics_dir / 'SUMMARY.csv'}")
+    print(f"Summary CSV: {tracking_mgr.metrics_dir / 'training_results.csv'}")
     print(f"All files: {tracking_mgr.local_storage}")
     print(f"\n{'='*100}\n")
 

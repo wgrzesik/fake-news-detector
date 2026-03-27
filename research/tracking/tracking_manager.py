@@ -114,16 +114,23 @@ class HybridTrackingManager:
         self.all_metrics.append(row)
 
     def save_summary_csv(self):
-        """Save all metrics to single CSV for analysis"""
+        """Save all metrics to single CSV for analysis, appending to existing data"""
         if not self.all_metrics:
             return None
 
-        summary_path = self.metrics_dir / "SUMMARY.csv"
-        df = pd.DataFrame(self.all_metrics)
+        summary_path = self.metrics_dir / "training_results.csv"
+        df_new = pd.DataFrame(self.all_metrics)
+
+        # Load existing data if it exists and append
+        if summary_path.exists():
+            df_existing = pd.read_csv(summary_path)
+            df = pd.concat([df_existing, df_new], ignore_index=True)
+        else:
+            df = df_new
 
         # Sort by F1 score
         df = df.sort_values('f1_score', ascending=False)
-        df.to_csv(summary_path, mode='a', index=False)
+        df.to_csv(summary_path, index=False)
 
         mlflow.log_artifact(str(summary_path), "summary")
         return str(summary_path)

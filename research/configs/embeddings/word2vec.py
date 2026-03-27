@@ -4,6 +4,8 @@ from .base_embedding import BaseEmbedder
 
 
 class Word2VecEmbedder(BaseEmbedder):
+    """Word2Vec embedder using Gensim with average pooling."""
+
     def __init__(
         self,
         vector_size=100,

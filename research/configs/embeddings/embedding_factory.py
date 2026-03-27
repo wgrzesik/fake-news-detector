@@ -5,6 +5,8 @@ from .glove import GloveEmbedder
 
 
 class EmbedderFactory:
+    """Factory for creating embedding instances by name."""
+
     REGISTRY = {
         "tfidf": TfidfEmbedder,
         "bow": BowEmbedder,

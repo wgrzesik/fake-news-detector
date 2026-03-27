@@ -5,6 +5,8 @@ from research.configs.models import SVMModel, LogisticRegressionModel, NaiveBaye
 
 
 class ModelFactory:
+    """Factory for creating model instances with embedding compatibility validation."""
+
     MODEL_REGISTRY = {
         'svm': SVMModel,
         'lr': LogisticRegressionModel,
@@ -38,10 +40,30 @@ class ModelFactory:
         'roberta': ['roberta-base']
     }
 
+    # Preprocessing map: Model Type -> required preprocessing mode
+    PREPROCESSING_MAP = {
+        # ML Models – classic preprocessing (lowering, URL/HTML/punct/digit removal)
+        'svm': 'classic',
+        'lr': 'classic',
+        'nb': 'classic',
+        'mnb': 'classic',
+        'knn': 'classic',
+        'rf': 'classic',
+        'dt': 'classic',
+        'xgb': 'classic',
+
+        # DL Models
+        'lstm': 'classic',
+
+        # Transformer Models – minimal preprocessing (BERT tokenizer handles the rest)
+        'bert': 'bert',
+        'roberta': 'bert',
+    }
+
     @staticmethod
     def get_model(dataset_name: str, model_type: str, embedding_type: str, **kwargs) -> BaseModel:
         """
-        Instantiates a models after checking for compatibility between models and embeddings.
+        Instantiate a model after checking compatibility between model and embedding.
         """
         valid_embeddings = ModelFactory.COMPATIBILITY_MAP.get(model_type, [])
         if embedding_type not in valid_embeddings:
@@ -53,10 +75,22 @@ class ModelFactory:
 
     @staticmethod
     def get_valid_models_for_embedding(embedding_type: str) -> List[str]:
-        """Helper: returns a list of models that support a specific embeddings."""
+        """Helper: returns a list of models that support a specific embedding."""
         return [m for m, embs in ModelFactory.COMPATIBILITY_MAP.items() if embedding_type in embs]
 
     @staticmethod
     def get_valid_embeddings_for_model(model_type: str) -> List[str]:
-        """Helper: returns a list of embeddings supported by a specific models."""
+        """Helper: returns a list of embeddings supported by a specific model."""
         return ModelFactory.COMPATIBILITY_MAP.get(model_type, [])
+
+    @staticmethod
+    def get_preprocessing_for_model(model_type: str, fallback: str = "classic") -> str:
+        """Returns the required preprocessing mode for a given model type.
+        Falls back to *fallback* when the model is not in the map."""
+        return ModelFactory.PREPROCESSING_MAP.get(model_type, fallback)
+
+    @staticmethod
+    def get_all_preprocessing_modes() -> List[str]:
+        """Returns a sorted list of unique preprocessing modes used across all models."""
+        return sorted(set(ModelFactory.PREPROCESSING_MAP.values()))
+

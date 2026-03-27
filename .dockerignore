@@ -1,0 +1,58 @@
+# ── Python ──────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ───────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── IDE ────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+
+# ── Git ────────────────────────────────────────────────────
+.git/
+.gitignore
+
+# ── Datasets (large, mounted as volumes for training) ──────
+research/configs/datasets/
+
+# ── Saved models — exclude everything, then whitelist the 3 the API needs ──
+saved_models/
+!saved_models/LIAR/lr_word2vec/
+!saved_models/ISOT/svm_tfidf/
+!saved_models/WELFake/xgb_tfidf/
+
+# ── Databases (mutable state, mounted as volumes) ──────────
+mlflow.db
+optuna.db
+
+# ── MLflow runs (mounted as volumes) ──────────────────────
+mlruns/
+
+# ── Hydra outputs ─────────────────────────────────────────
+outputs/
+multirun/
+.hydra/
+
+# ── Experiment results (mounted as volumes for training) ──
+experiments/
+
+# ── Extension (not needed inside containers) ──────────────
+extension/
+
+# ── Docs / misc ───────────────────────────────────────────
+README.md
+results_*.csv
+*.md
+
+

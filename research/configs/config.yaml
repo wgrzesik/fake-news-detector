@@ -5,7 +5,7 @@ seed: 42
 base_data_dir: "research/configs/datasets/processed"
 
 datasets_list:
-  - ISOT
+  - isot
   - liar
   - welfake
 
@@ -130,7 +130,7 @@ datasets:
 
 # Optuna config
 optuna:
-  n_trials: 10
+  n_trials: 1
   n_jobs: 2
   timeout: null
   sampler: tpe

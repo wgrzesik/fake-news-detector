@@ -1,13 +1,12 @@
-import argparse
 from pathlib import Path
 from typing import List, Optional
 
+import hydra
 import pandas as pd
-from omegaconf import OmegaConf
+from omegaconf import DictConfig
 
 from research.configs.models.model_factory import ModelFactory
-from research.web_scrapper import create_simulated_web_data, WebNewsCollector
-from research.web_testing import WebTestEvaluator
+from research.web.evaluator import WebTestEvaluator
 
 
 class WebTestRunner:
@@ -39,15 +38,6 @@ class WebTestRunner:
     def find_saved_models(self, models: Optional[List[str]] = None, embeddings: Optional[List[str]] = None):
         """
         Find saved models with optional filtering
-
-        Directory structure:
-        saved_models/
-        └── ISOT/
-            ├── rf_tfidf/
-            │   ├── classifier.joblib
-            │   └── embedder.pkl
-            ├── svm_tfidf/
-            └── xgb_bow/
         """
         found_models = []
 
@@ -109,11 +99,11 @@ class WebTestRunner:
         model_name = parts[0]
         embedding_name = parts[1]
 
-        # Validate
-        valid_models = [
-            'svm', 'lr', 'nb', 'mnb', 'knn', 'rf', 'dt', 'xgb', 'sgd', 'ridge'
-        ]
-        valid_embeddings = ['tfidf', 'bow', 'word2vec', 'glove']
+        # Validate against ModelFactory registries
+        valid_models = list(ModelFactory.COMPATIBILITY_MAP.keys())
+        valid_embeddings = set()
+        for embs in ModelFactory.COMPATIBILITY_MAP.values():
+            valid_embeddings.update(embs)
 
         if model_name not in valid_models:
             return None
@@ -131,9 +121,12 @@ class WebTestRunner:
             web_data: pd.DataFrame,
             models: Optional[List[str]] = None,
             embeddings: Optional[List[str]] = None,
+            preprocessing_name: str = "classic",
             num_models: Optional[int] = None
     ):
-        """Run tests on web data with filtering"""
+        """Run tests on web data with filtering.
+        preprocessing_name is used only as a fallback – the actual mode
+        is resolved per model via ModelFactory.PREPROCESSING_MAP."""
         found_models = self.find_saved_models(
             models=models,
             embeddings=embeddings
@@ -152,12 +145,18 @@ class WebTestRunner:
 
         print("\nModels to test:")
         for i, m in enumerate(found_models, 1):
+            prep_mode = ModelFactory.get_preprocessing_for_model(
+                m['model'], fallback=preprocessing_name
+            )
             print(
                 f"{i:3d}. {m['model']:8s} + {m['embedding']:10s} "
-                f"({m['dir_name']})"
+                f"(preprocessing: {prep_mode}) ({m['dir_name']})"
             )
 
-        web_tester = WebTestEvaluator(results_dir=str(self.results_dir))
+        web_tester = WebTestEvaluator(
+            preprocessor_name=preprocessing_name,
+            results_dir=str(self.results_dir)
+        )
         X_web = web_data['text'].tolist()
         y_web = web_data['label'].tolist()
 
@@ -179,14 +178,14 @@ class WebTestRunner:
                 )
                 model.load()
 
-                # Evaluate on web data
+                # Evaluate on web data (preprocessing resolved automatically per model)
                 result = web_tester.evaluate_model_on_web_data(
                     model=model,
                     X_web=X_web,
                     y_web=y_web,
                     dataset_name=self.dataset_name,
                     model_name=model_info['model'],
-                    embedding_name=model_info['embedding']
+                    embedding_name=model_info['embedding'],
                 )
 
                 if result:
@@ -206,6 +205,9 @@ class WebTestRunner:
 
         if failed:
             print(f"\n{len(failed)} models failed: {', '.join(failed)}")
+
+        # Clear preprocessing cache after a full run
+        web_tester.clear_cache()
 
         return pd.DataFrame(results)
 
@@ -278,142 +280,144 @@ class WebTestRunner:
         print(f"Report saved to {output_path}")
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description='Test trained models on web-scraped data',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-
-  # Test all models for default dataset (ISOT)
-  python -m research.test_on_web_data
-
-  # Test specific models only
-  python -m research.test_on_web_data --models svm xgb rf
-
-  # Test specific embeddings
-  python -m research.test_on_web_data --embeddings tfidf
-
-  # Test specific model + embedding combinations
-  python -m research.test_on_web_data --models svm xgb --embeddings tfidf
-
-  # Limit to first 5 models
-  python -m research.test_on_web_data --num-models 5
-
-  # Custom dataset
-  python -m research.test_on_web_data --dataset ISOT
-        """
-    )
-
-    parser.add_argument(
-        '--models-dir',
-        default=None,
-        help='Saved models root directory (default: auto-detect)'
-    )
-
-    parser.add_argument(
-        '--results-dir',
-        default='./experiments/web_test_results',
-        help='Results directory (default: ./experiments/web_test_results)'
-    )
-
-    parser.add_argument(
-        '--dataset',
-        default='ISOT',
-        help='Dataset name (default: ISOT)'
-    )
-
-    parser.add_argument(
-        '--models',
-        nargs='+',
-        help='Filter by model names (e.g., svm xgb rf dt)'
-    )
-
-    parser.add_argument(
-        '--embeddings',
-        nargs='+',
-        help='Filter by embedding names (e.g., tfidf bow word2vec)'
-    )
-
-    parser.add_argument(
-        '--num-models',
-        type=int,
-        default=None,
-        help='Limit number of models to test'
-    )
-
-    parser.add_argument(
-        '--report',
-        default='web_test_report.txt',
-        help='Report output path (default: web_test_report.txt)'
-    )
-
-    args = parser.parse_args()
-
+def main_with_hydra(cfg: DictConfig):
+    """Main function with Hydra configuration support"""
     print("\n" + "=" * 100)
     print("WEB DATA TESTING")
     print("=" * 100)
 
-    # Run tests
-    try:
-        runner = WebTestRunner(
-            saved_models_dir=args.models_dir,
-            dataset_name=args.dataset,
-            results_dir=args.results_dir
-        )
-    except FileNotFoundError as e:
-        print(f"{e}")
+    # Get configuration values
+    datasets = cfg.get('datasets_list', [cfg.datasets.name])
+    models_list = cfg.get('models_to_optimize', [cfg.models.name])
+    embeddings_list = cfg.get('embeddings_to_use', [cfg.embeddings.name])
+    preprocessing_name = cfg.get('preprocessing', {}).get('name', 'classic')
+    results_dir = cfg.get('results_dir', './experiments/web_test_results')
+    
+    print(f"\nConfiguration loaded:")
+    print(f"  Datasets: {datasets}")
+    print(f"  Models: {models_list}")
+    print(f"  Embeddings: {embeddings_list}")
+    print(f"  Preprocessing: {preprocessing_name}")
+    print(f"  Results dir: {results_dir}\n")
+
+    # Load web data
+    web_data_path = cfg.web_scraping.output_dir + "/web_scraped_news.csv"
+    if not Path(web_data_path).exists():
+        print(f"[Warning] Web data not found at {web_data_path}")
+        print("Skipping web testing")
         return
 
-    cfg = OmegaConf.load("research/configs/config.yaml")
-    web_data = pd.read_csv(cfg.web_scraping.output_dir + "/web_scraped_news.csv")
+    web_data = pd.read_csv(web_data_path)
     web_data = web_data.dropna(subset=['text', 'label'])
-    # web_data['text'] = web_data['text'].astype(str)
-    # web_data['label'] = web_data['label'].astype(int)
-    print(f"Loaded {len(web_data)} valid samples for testing.")
+    print(f"Loaded {len(web_data)} valid samples for testing.\n")
 
-    print("[Finding and testing models]\n")
-    web_results = runner.run_web_tests(
-        web_data,
-        models=args.models,
-        embeddings=args.embeddings,
-        num_models=args.num_models
-    )
+    # Run tests for each dataset
+    all_results = []
+    for dataset_name in datasets:
+        print("\n" + "=" * 100)
+        print(f"TESTING DATASET: {dataset_name.upper()}")
+        print("=" * 100)
 
-    if web_results.empty:
-        print("No results to save")
-        return
+        try:
+            runner = WebTestRunner(
+                saved_models_dir=None,
+                dataset_name=dataset_name,
+                results_dir=results_dir
+            )
+        except FileNotFoundError as e:
+            print(f"{e}")
+            continue
 
-    # Save results
-    output_path = Path(args.results_dir) / "web_test_results.csv"
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    web_results.to_csv(output_path, index=False)
-    print(f"Results saved to {output_path}")
+        print("[Finding and testing models]\n")
+        web_results = runner.run_web_tests(
+            web_data,
+            models=models_list,
+            embeddings=embeddings_list,
+            preprocessing_name=preprocessing_name,
+            num_models=None
+        )
 
-    # Print summary
-    print("\n" + "=" * 100)
-    print("RESULTS SUMMARY")
-    print("=" * 100)
-    print(f"\nTotal models tested: {len(web_results)}")
-    print(f"Average F1 Score: {web_results['f1_score'].mean():.4f}")
-    print(f"Best F1 Score: {web_results['f1_score'].max():.4f}")
-    print(f"Worst F1 Score: {web_results['f1_score'].min():.4f}\n")
+        if not web_results.empty:
+            all_results.append(web_results)
 
-    print("Top 10 Models:")
-    print(web_results.nlargest(10, 'f1_score')[[
-        'model', 'embedding', 'f1_score', 'accuracy'
-    ]].to_string(index=False))
+            # Print dataset summary
+            print("\n" + "-" * 100)
+            print(f"DATASET SUMMARY: {dataset_name.upper()}")
+            print("-" * 100)
+            print(f"Total models tested: {len(web_results)}")
+            print(f"Average F1 Score: {web_results['f1_score'].mean():.4f}")
+            print(f"Best F1 Score: {web_results['f1_score'].max():.4f}")
+            print(f"Worst F1 Score: {web_results['f1_score'].min():.4f}\n")
 
-    print("\nBottom 5 Models:")
-    print(web_results.nsmallest(5, 'f1_score')[[
-        'model', 'embedding', 'f1_score', 'accuracy'
-    ]].to_string(index=False))
+            print("Top 5 Models:")
+            print(web_results.nlargest(5, 'f1_score')[[
+                'model', 'embedding', 'f1_score', 'accuracy'
+            ]].to_string(index=False))
 
-    # Generate report
-    print(f"\n[Generating report]")
-    runner.generate_report(web_results, output_path=args.report)
+    # Combined results - save to single file
+    if all_results:
+        combined_results = pd.concat(all_results, ignore_index=True)
+        
+        # Sort by F1 score
+        combined_results = combined_results.sort_values('f1_score', ascending=False)
+
+        # Keep only the required columns
+        columns = [
+            'experiment_key', 'dataset', 'model', 'embedding',
+            'test_type', 'num_samples',
+            'accuracy', 'precision', 'recall', 'f1_score',
+            'timestamp', 'confusion_matrix',
+        ]
+        combined_results = combined_results[[c for c in columns if c in combined_results.columns]]
+
+        # Append results to results.csv (create with header if file does not exist)
+        output_path = Path(results_dir) / "results.csv"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        file_exists = output_path.exists()
+        combined_results.to_csv(
+            output_path,
+            mode='a',
+            header=not file_exists,
+            index=False,
+        )
+        print(f"\n\nResults appended to {output_path}")
+
+        # Print overall summary
+        print("\n" + "=" * 100)
+        print("OVERALL RESULTS SUMMARY")
+        print("=" * 100)
+        print(f"\nTotal models tested: {len(combined_results)}")
+        print(f"Average F1 Score: {combined_results['f1_score'].mean():.4f}")
+        print(f"Best F1 Score: {combined_results['f1_score'].max():.4f}")
+        print(f"Worst F1 Score: {combined_results['f1_score'].min():.4f}\n")
+
+        print("Top 10 Models (across all datasets):")
+        print(combined_results.nlargest(10, 'f1_score')[[
+            'dataset', 'model', 'embedding', 'f1_score', 'accuracy'
+        ]].to_string(index=False))
+
+        print("\nBottom 5 Models:")
+        print(combined_results.nsmallest(5, 'f1_score')[[
+            'dataset', 'model', 'embedding', 'f1_score', 'accuracy'
+        ]].to_string(index=False))
+
+        # Summary by dataset
+        print("\n" + "-" * 100)
+        print("SUMMARY BY DATASET")
+        print("-" * 100)
+        by_dataset = combined_results.groupby('dataset').agg({
+            'f1_score': ['count', 'mean', 'max', 'min', 'std'],
+            'accuracy': 'mean'
+        }).round(4)
+        print(by_dataset)
 
     print("\n" + "=" * 100 + "\n")
+
+
+@hydra.main(version_base=None, config_path="configs", config_name="config")
+def main(cfg: DictConfig):
+    """Main entry point with Hydra configuration"""
+    main_with_hydra(cfg)
 
 
 if __name__ == "__main__":

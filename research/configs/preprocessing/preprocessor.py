@@ -1,8 +1,11 @@
 import re
 from string import punctuation
+from typing import List
 
 
 class TextPreprocessor:
+    """Text preprocessing with multiple mode support (classic, bert)."""
+
     def __init__(self, mode: str = "classic"):
         self.mode = mode
 
@@ -38,5 +41,6 @@ class TextPreprocessor:
 
         return text
 
-    def transform(self, texts):
+    def transform(self, texts: List[str]) -> List[str]:
+        """Apply preprocessing to a list of texts."""
         return [self.preprocess(t) for t in texts]

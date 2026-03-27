@@ -22,8 +22,29 @@ class WebTestEvaluator:
         self.results_dir = os.path.abspath(results_dir)
         os.makedirs(self.results_dir, exist_ok=True)
 
-        self.preprocessing = TextPreprocessor(mode=preprocessor_name)
+        # Cache: preprocessing_mode -> TextPreprocessor instance
+        self._preprocessors: Dict[str, TextPreprocessor] = {}
+        # Cache: preprocessing_mode -> list of preprocessed texts
+        self._preprocessing_cache: Dict[str, List[str]] = {}
         self.results = []
+
+    def _get_preprocessor(self, mode: str) -> TextPreprocessor:
+        """Get (or create) a TextPreprocessor for the given mode."""
+        if mode not in self._preprocessors:
+            self._preprocessors[mode] = TextPreprocessor(mode=mode)
+        return self._preprocessors[mode]
+
+    def _preprocess_texts(self, texts: List[str], mode: str) -> List[str]:
+        """Preprocess texts with caching per mode."""
+        cache_key = mode
+        if cache_key not in self._preprocessing_cache:
+            preprocessor = self._get_preprocessor(mode)
+            self._preprocessing_cache[cache_key] = preprocessor.transform(texts)
+        return self._preprocessing_cache[cache_key]
+
+    def clear_cache(self):
+        """Clear preprocessing cache (call between different web datasets)."""
+        self._preprocessing_cache.clear()
 
     def evaluate_model_on_web_data(
         self,
@@ -33,16 +54,29 @@ class WebTestEvaluator:
         dataset_name: str,
         model_name: str,
         embedding_name: str,
-        run_id: str = None
+        preprocessing_name: str = None,
     ):
         """
-        Evaluate a trained model on web-scraped data
+        Evaluate a trained model on web-scraped data.
+        Preprocessing mode is resolved automatically from PREPROCESSING_MAP.
         """
-        print(f"\n[Web Testing] {model_name} + {embedding_name} on {dataset_name}")
+        # Resolve preprocessing mode for this model
+        resolved_preprocessing = ModelFactory.get_preprocessing_for_model(
+            model_name, fallback=self.preprocessor_name
+        )
+        if preprocessing_name and preprocessing_name != resolved_preprocessing:
+            print(
+                f"[Info] Preprocessing override: '{preprocessing_name}' -> "
+                f"'{resolved_preprocessing}' (from PREPROCESSING_MAP for '{model_name}')"
+            )
+        preprocessing_name = resolved_preprocessing
+
+        print(f"\n[Web Testing] {model_name} + {embedding_name} on {dataset_name} "
+              f"(preprocessing: {preprocessing_name})")
 
         try:
-            # Preprocess
-            X_web_proc = self.preprocessing.transform(X_web)
+            # Preprocess (cached per mode)
+            X_web_proc = self._preprocess_texts(X_web, preprocessing_name)
 
             # Embed using model's embedder
             X_web_vec = model.embedder.transform(X_web_proc)
@@ -50,16 +84,16 @@ class WebTestEvaluator:
             # Evaluate
             metrics = model.evaluate_on_vectors(X_web_vec, y_web)
 
-            # Get predictions
-            if model.scaler:
-                X_web_scaled = model.scaler.transform(X_web_vec)
-            else:
-                X_web_scaled = X_web_vec
+            # Create experiment key
+            experiment_key = f"{dataset_name}_{model_name}_{embedding_name}"
 
-            y_pred = model.classifier.predict(X_web_scaled)
-            y_probs = model.predict_proba_on_vectors(X_web_vec)
+            # Get confusion matrix if available
+            confusion_matrix = None
+            if "confusion_matrix" in metrics:
+                confusion_matrix = str(metrics["confusion_matrix"])
 
             results = {
+                'experiment_key': experiment_key,
                 'dataset': dataset_name,
                 'model': model_name,
                 'embedding': embedding_name,
@@ -69,8 +103,8 @@ class WebTestEvaluator:
                 'precision': round(metrics['precision'], 4),
                 'recall': round(metrics['recall'], 4),
                 'f1_score': round(metrics['f1_score'], 4),
-                'run_id': run_id,
                 'timestamp': datetime.now().isoformat(),
+                'confusion_matrix': confusion_matrix,
             }
 
             return results
@@ -86,7 +120,6 @@ class WebTestEvaluator:
         y_web: List[int],
         dataset_name: str,
         embedding_name: str,
-        run_id: str = None
     ):
         """
         Evaluate multiple model configurations on web data
@@ -113,7 +146,6 @@ class WebTestEvaluator:
                     dataset_name=dataset_name,
                     model_name=model_name,
                     embedding_name=embedding_name,
-                    run_id=run_id
                 )
 
                 if result:
@@ -124,8 +156,17 @@ class WebTestEvaluator:
 
         return pd.DataFrame(results)
 
-    def save_web_test_results(self, results_df: pd.DataFrame, filename: str = "web_test_results.csv"):
-        """Save web test results"""
+    def save_web_test_results(self, results_df: pd.DataFrame, filename: str = "results.csv"):
+        """Save web test results to a single results.csv file."""
+        # Keep only the canonical columns
+        columns = [
+            'experiment_key', 'dataset', 'model', 'embedding',
+            'test_type', 'num_samples',
+            'accuracy', 'precision', 'recall', 'f1_score',
+            'timestamp', 'confusion_matrix',
+        ]
+        results_df = results_df[[c for c in columns if c in results_df.columns]]
+
         filepath = os.path.join(self.results_dir, filename)
         file_exists = os.path.exists(filepath)
         results_df.to_csv(

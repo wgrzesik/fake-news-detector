@@ -18,7 +18,8 @@ A comprehensive machine learning project for detecting fake news using various N
 10. [Models & Embeddings Reference](#models--embeddings-reference)
 11. [Smart Routing Logic](#smart-routing-logic)
 12. [Datasets](#datasets)
-13. [Contributing](#contributing)
+13. [Docker](#docker)
+14. [Contributing](#contributing)
 
 ---
 
@@ -28,7 +29,7 @@ The project has two main components:
 
 | Component | Description |
 |---|---|
-| **Research framework** | Two training pipelines (simple benchmark + Hydra/Optuna), web scraping, web testing, and result tracking |
+| **Research framework** | Hydra/Optuna training pipeline, web scraping, web testing, and result tracking |
 | **Chrome extension** | Browser popup that sends selected text to the FastAPI backend and displays a real/fake verdict |
 
 ---
@@ -36,22 +37,22 @@ The project has two main components:
 ## Architecture
 
 ```
-Web scraping (collect_web_data.py)
+Web scraping (collect_web.py)
         │
         ▼
   Raw text data
         │
         ▼
-Preprocessing (preprocess.py / TextPreprocessor)
+Preprocessing (TextPreprocessor)
         │
         ▼
 Embedding (TF-IDF / BoW / Word2Vec / GloVe)
         │
         ▼
-Model training & Optuna optimisation (train_all_models_final.py)
+Model training & Optuna optimisation (train_models.py)
         │
         ▼
-Evaluation & result tracking (result_manager.py / tracking_manager.py)
+Evaluation & result tracking (tracking_manager.py)
         │
         ▼
  saved_models/   ←→   FastAPI backend (api.py)
@@ -76,26 +77,20 @@ fake-news-detector/
 ├── research/
 │   ├── configs/
 │   │   ├── config.yaml               # Hydra config (datasets, models, embeddings, Optuna, MLflow)
-│   │   ├── embeddings/               # Embedding config classes
-│   │   ├── models/                   # Model config classes & factory
-│   │   └── preprocessing/            # Preprocessor config
-│   ├── embeddings/                   # Embedding implementations (TF-IDF, BoW, Word2Vec, GloVe)
-│   ├── models/                       # Model wrappers (SVM, LR, RF, XGB, …)
-│   ├── analyze_experiments.py        # Post-run analysis utilities
-│   ├── base.py                       # Abstract base classes
-│   ├── collect_web_data.py           # Web scraper for real news articles
-│   ├── factory.py                    # Simple model factory (used by main.py)
-│   ├── main.py                       # Simple benchmark pipeline
-│   ├── preprocess.py                 # Text preprocessing utilities
-│   ├── result_manager.py             # Predictions & metrics storage
-│   ├── test_on_web_data.py           # CLI: test trained models on web-scraped data
-│   ├── tracking_manager.py           # Hybrid CSV + MLflow tracking manager
-│   ├── train_all_models_final.py     # Full Hydra/Optuna training pipeline
-│   ├── web_scrapper.py               # News collection helpers
-│   └── web_testing.py                # WebTestEvaluator class
+│   │   ├── embeddings/               # Embedding implementations (TF-IDF, BoW, Word2Vec, GloVe)
+│   │   ├── models/                   # Model wrappers & factory (SVM, LR, RF, XGB, …)
+│   │   └── preprocessing/            # Text preprocessing (TextPreprocessor)
+│   ├── tracking/
+│   │   └── tracking_manager.py       # Hybrid CSV + MLflow tracking manager
+│   ├── web/
+│   │   ├── collect_web.py            # CLI: collect/simulate web-scraped articles
+│   │   ├── web_scraper.py            # News source definitions & RSS collector
+│   │   └── evaluator.py              # WebTestEvaluator class
+│   ├── train_models.py               # Hydra/Optuna training pipeline (main entry point)
+│   ├── evaluate_web.py               # CLI: test trained models on web-scraped data
+│   └── analyze_results.py            # Analysis & visualisation of training vs web results
 ├── experiments/                      # Generated output directory (gitignored data, skeleton tracked)
-│   ├── results/                      # benchmark_*.csv from main.py
-│   ├── metrics/                      # SUMMARY.csv from full pipeline
+│   ├── metrics/                      # training_results.csv from training pipeline
 │   ├── predictions/                  # Per-experiment prediction CSVs
 │   ├── web_test_results/             # Web testing CSVs and reports
 │   ├── hyperparams/                  # Best Optuna hyperparameters (JSON)
@@ -137,15 +132,15 @@ fake-news-detector/
 
 4. **Prepare datasets**
 
-   Datasets are not included in the repository due to their size. Download them and place the processed splits under `research/data/processed/`:
+   Datasets are not included in the repository due to their size. Download them and place the processed splits under `research/configs/datasets/processed/`:
 
    | Dataset | Expected path |
    |---|---|
-   | ISOT | `research/data/processed/ISOT/train.csv`, `test.csv` |
-   | LIAR | `research/data/processed/LIAR/train.csv`, `test.csv` |
-   | WELFake | `research/data/processed/WELFake/train.csv`, `test.csv` |
+   | ISOT | `research/configs/datasets/processed/isot/train.csv`, `test.csv` |
+   | LIAR | `research/configs/datasets/processed/liar/train.csv`, `test.csv` |
+   | WELFake | `research/configs/datasets/processed/welfake/train.csv`, `test.csv` |
 
-   Each CSV must have at least two columns: `text` and `label` (0 = real, 1 = fake).
+   Each CSV must have at least two columns: `text` and `label` (0 = fake, 1 = real).
 
    Download links:
    - **ISOT**: [https://www.uvic.ca/engineering/ece/isot/datasets/](https://www.uvic.ca/engineering/ece/isot/datasets/)
@@ -156,80 +151,77 @@ fake-news-detector/
 
 ## Research Pipeline — Quick Start
 
-### Simple benchmark (`research/main.py`)
-
-Trains every model × embedding combination without hyperparameter optimisation:
-
-```bash
-python -m research.main
-```
-
-Results are saved to `experiments/results/benchmark_{dataset}.csv`.
-
-### Full Hydra/Optuna pipeline (`research/train_all_models_final.py`)
+### Hydra/Optuna pipeline (`research/train_models.py`)
 
 Runs Optuna hyperparameter search for every dataset × model × embedding combination and tracks results with MLflow:
 
 ```bash
-python -m research.train_all_models_final
+python -m research.train_models
 ```
 
 Key configuration options are in `research/configs/config.yaml`:
 
 | Key | Default | Description |
 |---|---|---|
-| `datasets_list` | `[ISOT, liar, welfake]` | Datasets to iterate over |
+| `datasets_list` | `[isot, liar, welfake]` | Datasets to iterate over |
 | `models_to_optimize` | all 8 | Models to run |
 | `embeddings_to_use` | all 4 | Embeddings to run |
-| `optuna.n_trials` | `10` | Optuna trials per experiment |
+| `optuna.n_trials` | `1` | Optuna trials per experiment |
 | `preprocessing.name` | `classic` | Preprocessing strategy |
 | `mlflow.experiment_name` | `fake_news_detection` | MLflow experiment name |
 
-Results are saved to `experiments/metrics/SUMMARY.csv`.
+Results are saved to `experiments/metrics/training_results.csv`.
 
-### Collect web data (`research/collect_web_data.py`)
+### Collect web data (`research/web/collect_web.py`)
 
 Scrapes real news articles from the web:
 
 ```bash
-python -m research.collect_web_data
+python -m research.web.collect_web
 ```
 
 Scraped data is saved to the directory configured in `config.yaml` under `web_scraping.output_dir`.
 
-### Test on web data (`research/test_on_web_data.py`)
+### Evaluate on web data (`research/evaluate_web.py`)
 
 Tests all saved models against web-scraped data:
 
 ```bash
-# Test all models for the default dataset (ISOT)
-python -m research.test_on_web_data
+# Test all models using default config
+python -m research.evaluate_web
 
-# Test specific models only
-python -m research.test_on_web_data --models svm xgb rf
+# Test specific models only (Hydra override)
+python -m research.evaluate_web models_to_optimize=[svm,xgb,rf]
 
 # Test specific embeddings
-python -m research.test_on_web_data --embeddings tfidf
+python -m research.evaluate_web embeddings_to_use=[tfidf]
 
-# Limit to the first 5 models found
-python -m research.test_on_web_data --num-models 5
-
-# Custom dataset
-python -m research.test_on_web_data --dataset LIAR
-
-# Custom results directory
-python -m research.test_on_web_data --results-dir ./my_results
+# Custom dataset list
+python -m research.evaluate_web datasets_list=[liar]
 ```
 
-| Flag | Default | Description |
+Configuration is managed via Hydra overrides on `research/configs/config.yaml`:
+
+| Override | Default | Description |
 |---|---|---|
-| `--dataset` | `ISOT` | Dataset whose trained models to load |
-| `--models` | all | Filter by model name(s) |
-| `--embeddings` | all | Filter by embedding name(s) |
-| `--num-models` | unlimited | Limit number of models tested |
-| `--models-dir` | auto-detect | Override saved models root directory |
-| `--results-dir` | `./experiments/web_test_results` | Where to write result CSVs |
-| `--report` | `web_test_report.txt` | Report output path |
+| `datasets_list` | `[isot, liar, welfake]` | Datasets whose trained models to load |
+| `models_to_optimize` | all 8 | Filter by model name(s) |
+| `embeddings_to_use` | all 4 | Filter by embedding name(s) |
+| `web_testing.results_dir` | `./experiments/web_test_results` | Where to write result CSVs |
+
+### Analyse results (`research/analyze_results.py`)
+
+Compares training results with web evaluation results, generates per-dataset and global rankings, delta metrics and visualisations:
+
+```bash
+python -m research.analyze_results
+```
+
+| Output | Location |
+|---|---|
+| Per-dataset ranking & charts | `experiments/results/{dataset}/` |
+| Global ranking & charts | `experiments/results/all/` |
+| Cross-comparison summary | `experiments/results/{dataset}/summary.csv` |
 
 ---
 
@@ -237,14 +229,14 @@ python -m research.test_on_web_data --results-dir ./my_results
 
 ### Unified result schema
 
-Both pipelines write results using the same column schema:
+The training pipeline writes results using the following column schema:
 
 | Column | Description |
 |---|---|
 | `dataset` | Dataset name (ISOT, LIAR, WELFake) |
 | `model` | Model key (svm, lr, rf, …) |
 | `embedding` | Embedding key (tfidf, bow, word2vec, glove) |
-| `preprocessing` | Preprocessing strategy (`none` for `main.py`, `classic` for full pipeline) |
+| `preprocessing` | Preprocessing strategy (`classic` for the training pipeline) |
 | `accuracy` | Test accuracy |
 | `precision` | Weighted precision |
 | `recall` | Weighted recall |
@@ -253,20 +245,21 @@ Both pipelines write results using the same column schema:
 | `inference_time_sec` | Evaluation/inference time in seconds |
 | `timestamp` | ISO-8601 timestamp |
 
-The full pipeline (`train_all_models_final.py`) additionally includes: `experiment_key`, `best_trial`, `run_id`, `confusion_matrix`.
+The pipeline additionally includes: `experiment_key`, `best_trial`, `run_id`, `confusion_matrix`.
 
-Web test results (`test_on_web_data.py`) additionally include: `test_type`, `num_samples`, `run_id`.
+Web test results (`evaluate_web.py`) additionally include: `test_type`, `num_samples`.
 
 ### Output file locations
 
 | File | Created by |
 |---|---|
-| `experiments/results/benchmark_{dataset}.csv` | `research/main.py` |
-| `experiments/metrics/SUMMARY.csv` | `research/train_all_models_final.py` |
-| `experiments/predictions/{dataset}/*.csv` | Full pipeline (per-experiment predictions) |
-| `experiments/web_test_results/web_test_results.csv` | `research/test_on_web_data.py` |
-| `experiments/hyperparams/{dataset}/*.json` | Full pipeline (best Optuna params) |
-| `experiments/trial_history/{dataset}/*.csv` | Full pipeline (Optuna trial history) |
+| `experiments/metrics/training_results.csv` | `research/train_models.py` |
+| `experiments/predictions/{dataset}/*.csv` | Training pipeline (per-experiment predictions) |
+| `experiments/web_test_results/results.csv` | `research/evaluate_web.py` |
+| `experiments/results/{dataset}/` | `research/analyze_results.py` |
+| `experiments/results/all/` | `research/analyze_results.py` |
+| `experiments/hyperparams/{dataset}/*.json` | Training pipeline (best Optuna params) |
+| `experiments/trial_history/{dataset}/*.csv` | Training pipeline (Optuna trial history) |
 
 ---
 
@@ -334,7 +327,7 @@ The server starts on `http://127.0.0.1:8000`. It loads three pre-trained models 
 | `word2vec` | Word2Vec (average pooling) |
 | `glove` | GloVe (average pooling) |
 
-Not all model × embedding combinations are valid. The factory validates compatibility automatically.
+Not all model × embedding combinations are valid. The `ModelFactory` validates compatibility automatically.
 
 ---
 
@@ -362,9 +355,70 @@ If the preferred model is not loaded, the API falls back to `general` or the fir
 
 ---
 
+## Docker
+
+The project includes Docker support for reproducible deployment and experimentation.
+
+### Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+
+### Files overview
+
+| File | Purpose |
+|---|---|
+| `Dockerfile` | FastAPI prediction API (includes only the 3 models the API uses) |
+| `Dockerfile.research` | Training pipeline, MLflow UI, web evaluation |
+| `docker-compose.yml` | Orchestrates all services |
+| `.dockerignore` | Keeps images small by excluding data, models, and caches |
+
+### Quick start — API only
+
+```bash
+# Build and start the prediction API
+docker-compose up api
+
+# API is now available at http://localhost:8000
+# Swagger docs at      http://localhost:8000/docs
+```
+
+### Start API + MLflow UI
+
+```bash
+docker-compose up api mlflow
+
+# API    → http://localhost:8000
+# MLflow → http://localhost:5000
+```
+
+### Run training pipeline
+
+```bash
+# Make sure datasets are in research/configs/datasets/processed/
+docker-compose --profile training run train
+```
+
+Training results, models, and databases are written back to your host machine via Docker volumes.
+
+### Rebuild after code changes
+
+```bash
+docker-compose build api          # rebuild API image only
+docker-compose build              # rebuild all images
+docker-compose up --build api     # rebuild + start in one step
+```
+
+### Stop everything
+
+```bash
+docker-compose down
+```
+
+---
+
 ## Contributing
 
 1. Fork the repository and create a feature branch from `develop`
-2. Follow the existing code style (factory pattern, typed hints, consistent CSV schema)
+2. Follow the existing code style (typed hints, consistent CSV schema)
 3. Add or update tests if applicable
 4. Open a pull request targeting the `develop` branch

@@ -6,6 +6,8 @@ import joblib
 
 
 class BaseEmbedder(ABC):
+    """Abstract base class for all text embedding implementations."""
+
     def clone(self):
         return copy.deepcopy(self)
 

@@ -1,0 +1,59 @@
+version: "3.9"
+
+services:
+  # FastAPI prediction backend
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fake-news-api
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    volumes:
+      - ./saved_models:/app/saved_models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # MLflow tracking UI
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.research
+    container_name: fake-news-mlflow
+    command: >
+      mlflow ui
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:///mlflow.db
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlflow.db:/app/mlflow.db
+      - ./mlruns:/app/mlruns
+    restart: unless-stopped
+
+  # Training pipeline  (on-demand — use `--profile training`)
+  train:
+    build:
+      context: .
+      dockerfile: Dockerfile.research
+    container_name: fake-news-train
+    command: python -m research.train_models
+    volumes:
+      # Datasets (read-only input)
+      - ./research/configs/datasets:/app/research/configs/datasets:ro
+      # Trained model output
+      - ./saved_models:/app/saved_models
+      # Experiment results
+      - ./experiments:/app/experiments
+      # Tracking databases
+      - ./mlflow.db:/app/mlflow.db
+      - ./optuna.db:/app/optuna.db
+      - ./mlruns:/app/mlruns
+    profiles:
+      - training
+

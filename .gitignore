@@ -21,7 +21,7 @@ env/
 
 # Data (IMPORTANT)
 research/configs/datasets/
-research/data/
+research/configs/web_scraped_data
 *.bin
 
 # ML stuff
@@ -43,6 +43,9 @@ outputs/
 
 # Experiment outputs (keep directory skeleton, ignore data)
 experiments/results/*.csv
+experiments/results/**/*.csv
+experiments/results/**/*.txt
+experiments/results/**/*.png
 experiments/web_test_results/*.csv
 experiments/web_test_results/*.txt
 experiments/predictions/**/*.csv
@@ -51,3 +54,7 @@ experiments/hyperparams/**/*.json
 experiments/trial_history/**/*.csv
 experiments/plots/**/*.png
 experiments/plots/**/*.pdf
+
+# Root-level result exports
+results_*.csv
+

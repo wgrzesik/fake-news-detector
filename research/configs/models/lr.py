@@ -1,9 +1,12 @@
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
-from research.configs.models.base_model import BaseModel
-from research.configs.embeddings.embedder_factory import EmbedderFactory
+from .base_model import BaseModel
+from research.configs.embeddings.embedding_factory import EmbedderFactory
+
 
 class LogisticRegressionModel(BaseModel):
+    """Logistic Regression model for fake news detection."""
+
     def __init__(self, dataset_name: str, embedding_type: str, **kwargs):
         super().__init__(dataset_name, f"lr_{embedding_type}")
 

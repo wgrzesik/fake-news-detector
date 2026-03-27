@@ -3,7 +3,7 @@ import argparse
 import pandas as pd
 from omegaconf import OmegaConf
 
-from research.web_scrapper import WebNewsCollector, create_simulated_web_data
+from research.web.web_scraper import WebNewsCollector, create_simulated_web_data
 
 
 def main():
