@@ -293,7 +293,7 @@ def main(cfg: DictConfig):
                         f"{dataset_name}_{model_name}_{embedding_name}_{preprocessing_name}"
                     )
 
-                    with mlflow.start_run(run_name=run_name):
+                    with mlflow.start_run(run_name=run_name, nested=True):
                         mlflow.set_tag("group", run_name)
                         mlflow.set_tag("model", model_name)
                         mlflow.set_tag("embedding", embedding_name)
@@ -316,7 +316,10 @@ def main(cfg: DictConfig):
                         sampler = TPESampler(seed=cfg.seed)
                         study = optuna.create_study(
                             sampler=sampler,
-                            direction='maximize'
+                            direction='maximize',
+                            study_name=run_name,
+                            storage=cfg.optuna.storage,
+                            load_if_exists=True
                         )
 
                         def objective(trial):

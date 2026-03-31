@@ -58,3 +58,6 @@ experiments/plots/**/*.pdf
 # Root-level result exports
 results_*.csv
 
+# Old notebook backup
+fake_news_detector_old.ipynb
+

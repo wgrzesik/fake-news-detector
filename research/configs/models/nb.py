@@ -13,3 +13,4 @@ class NaiveBayesModel(BaseModel):
         self.embedder = EmbedderFactory.create(embedding_type)
         self.classifier = GaussianNB(**kwargs)
         self.scaler = StandardScaler()
+
