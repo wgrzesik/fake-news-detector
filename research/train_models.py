@@ -204,7 +204,19 @@ def main(cfg: DictConfig):
 
     # Setup MLflow
     mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
-    mlflow.set_experiment(cfg.mlflow.experiment_name)
+    try:
+        mlflow.set_experiment(cfg.mlflow.experiment_name)
+    except Exception as e:
+        # Handle incompatible MLflow DB schema (version mismatch)
+        mlflow_uri = cfg.mlflow.tracking_uri
+        print(f"[MLflow] DB schema error: {e}")
+        if mlflow_uri and mlflow_uri.startswith("sqlite:///"):
+            db_path = mlflow_uri.replace("sqlite:///", "")
+            if os.path.exists(db_path):
+                print(f"[MLflow] Removing incompatible DB: {db_path}")
+                os.remove(db_path)
+        mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
+        mlflow.set_experiment(cfg.mlflow.experiment_name)
 
     experiment_count = 0
     total_combinations = (
