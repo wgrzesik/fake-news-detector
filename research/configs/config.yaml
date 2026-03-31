@@ -104,7 +104,7 @@ models:
     max_depth: 5
     learning_rate: 0.1
     n_estimators: 100
-    tree_method: auto        # use "gpu_hist" on Colab for GPU acceleration
+    tree_method: auto
     optuna:
       max_depth:
         type: int
