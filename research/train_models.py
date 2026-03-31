@@ -210,13 +210,23 @@ def main(cfg: DictConfig):
         # Handle incompatible MLflow DB schema (version mismatch)
         mlflow_uri = cfg.mlflow.tracking_uri
         print(f"[MLflow] DB schema error: {e}")
+        recovered = False
         if mlflow_uri and mlflow_uri.startswith("sqlite:///"):
             db_path = mlflow_uri.replace("sqlite:///", "")
             if os.path.exists(db_path):
-                print(f"[MLflow] Removing incompatible DB: {db_path}")
-                os.remove(db_path)
-        mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
-        mlflow.set_experiment(cfg.mlflow.experiment_name)
+                try:
+                    os.remove(db_path)
+                    print(f"[MLflow] Removed incompatible DB: {db_path}")
+                    mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
+                    mlflow.set_experiment(cfg.mlflow.experiment_name)
+                    recovered = True
+                except OSError:
+                    print(f"[MLflow] DB file locked, falling back to file-based tracking")
+        if not recovered:
+            fallback_uri = "./experiments/mlruns"
+            print(f"[MLflow] Using fallback tracking URI: {fallback_uri}")
+            mlflow.set_tracking_uri(fallback_uri)
+            mlflow.set_experiment(cfg.mlflow.experiment_name)
 
     experiment_count = 0
     total_combinations = (
@@ -336,19 +346,15 @@ def main(cfg: DictConfig):
                                 load_if_exists=True
                             )
                         except Exception as e:
-                            # Handle incompatible Optuna DB schema (version mismatch)
+                            # DB is locked by the failed connection on Windows;
+                            # fall back to in-memory storage instead of deleting
                             print(f"[Optuna] Storage error: {e}")
-                            if storage_url and storage_url.startswith("sqlite:///"):
-                                db_path = storage_url.replace("sqlite:///", "")
-                                if os.path.exists(db_path):
-                                    print(f"[Optuna] Removing incompatible DB: {db_path}")
-                                    os.remove(db_path)
+                            print(f"[Optuna] Falling back to in-memory storage "
+                                  f"(results still saved via MLflow/CSV)")
                             study = optuna.create_study(
                                 sampler=sampler,
                                 direction='maximize',
                                 study_name=run_name,
-                                storage=storage_url,
-                                load_if_exists=True
                             )
 
                         def objective(trial):
