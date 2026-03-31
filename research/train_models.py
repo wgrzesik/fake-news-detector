@@ -314,13 +314,30 @@ def main(cfg: DictConfig):
                         print(f"[Optuna] Running {cfg.optuna.n_trials} trials...")
 
                         sampler = TPESampler(seed=cfg.seed)
-                        study = optuna.create_study(
-                            sampler=sampler,
-                            direction='maximize',
-                            study_name=run_name,
-                            storage=cfg.optuna.storage,
-                            load_if_exists=True
-                        )
+                        storage_url = cfg.optuna.storage
+                        try:
+                            study = optuna.create_study(
+                                sampler=sampler,
+                                direction='maximize',
+                                study_name=run_name,
+                                storage=storage_url,
+                                load_if_exists=True
+                            )
+                        except Exception as e:
+                            # Handle incompatible Optuna DB schema (version mismatch)
+                            print(f"[Optuna] Storage error: {e}")
+                            if storage_url and storage_url.startswith("sqlite:///"):
+                                db_path = storage_url.replace("sqlite:///", "")
+                                if os.path.exists(db_path):
+                                    print(f"[Optuna] Removing incompatible DB: {db_path}")
+                                    os.remove(db_path)
+                            study = optuna.create_study(
+                                sampler=sampler,
+                                direction='maximize',
+                                study_name=run_name,
+                                storage=storage_url,
+                                load_if_exists=True
+                            )
 
                         def objective(trial):
                             return run_single_trial(
