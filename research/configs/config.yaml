@@ -93,12 +93,18 @@ models:
 
   svm:
     C: 1.0
+    max_iter: 5000
+    dual: auto
     optuna:
       C:
         type: float
         low: 0.1
         high: 100
         log: true
+      max_iter:
+        type: int
+        low: 1000
+        high: 10000
 
   xgb:
     max_depth: 5
