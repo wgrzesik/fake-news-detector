@@ -340,10 +340,7 @@ def main(cfg: DictConfig):
                         try:
                             study = optuna.create_study(
                                 sampler=sampler,
-                                direction='maximize',
-                                study_name=run_name,
-                                storage=storage_url,
-                                load_if_exists=True
+                                direction='maximize'
                             )
                         except Exception as e:
                             # DB is locked by the failed connection on Windows;

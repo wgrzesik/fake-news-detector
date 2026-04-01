@@ -136,7 +136,6 @@ optuna:
   timeout: null
   sampler: tpe
   pruner: median
-  storage: "sqlite:///optuna.db"
 
 # MLflow config
 mlflow:
