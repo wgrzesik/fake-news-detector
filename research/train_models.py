@@ -336,7 +336,6 @@ def main(cfg: DictConfig):
                         print(f"[Optuna] Running {cfg.optuna.n_trials} trials...")
 
                         sampler = TPESampler(seed=cfg.seed)
-                        storage_url = cfg.optuna.storage
                         try:
                             study = optuna.create_study(
                                 sampler=sampler,
