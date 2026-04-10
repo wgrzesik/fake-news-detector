@@ -113,6 +113,9 @@ class HybridTrackingManager:
 
         self.all_metrics.append(row)
 
+        # Save to CSV immediately after each experiment (crash-safe)
+        self.save_summary_csv()
+
     def save_summary_csv(self):
         """Save all metrics to single CSV for analysis, with upsert logic:
         overwrite existing rows for the same experiment_key, append new ones."""
