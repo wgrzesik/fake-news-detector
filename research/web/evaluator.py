@@ -97,6 +97,7 @@ class WebTestEvaluator:
                 'dataset': dataset_name,
                 'model': model_name,
                 'embedding': embedding_name,
+                'preprocessing': preprocessing_name,
                 'test_type': 'web_scraped',
                 'num_samples': len(y_web),
                 'accuracy': round(metrics['accuracy'], 4),
@@ -157,10 +158,11 @@ class WebTestEvaluator:
         return pd.DataFrame(results)
 
     def save_web_test_results(self, results_df: pd.DataFrame, filename: str = "results.csv"):
-        """Save web test results to a single results.csv file."""
+        """Save web test results to a single results.csv file.
+        Overwrites existing rows for the same experiment_key, appends new ones."""
         # Keep only the canonical columns
         columns = [
-            'experiment_key', 'dataset', 'model', 'embedding',
+            'experiment_key', 'dataset', 'model', 'embedding', 'preprocessing',
             'test_type', 'num_samples',
             'accuracy', 'precision', 'recall', 'f1_score',
             'timestamp', 'confusion_matrix',
@@ -168,13 +170,18 @@ class WebTestEvaluator:
         results_df = results_df[[c for c in columns if c in results_df.columns]]
 
         filepath = os.path.join(self.results_dir, filename)
-        file_exists = os.path.exists(filepath)
-        results_df.to_csv(
-            filepath,
-            mode='a',
-            header=not file_exists,
-            index=False,
-        )
+
+        # Upsert: load existing, concat, drop duplicates keeping newest
+        if os.path.exists(filepath):
+            df_existing = pd.read_csv(filepath)
+            df = pd.concat([df_existing, results_df], ignore_index=True)
+        else:
+            df = results_df
+
+        df = df.drop_duplicates(subset='experiment_key', keep='last')
+        df = df.sort_values('f1_score', ascending=False)
+        df.to_csv(filepath, index=False)
+
         print(f"Saved to {filepath}")
         return filepath
 

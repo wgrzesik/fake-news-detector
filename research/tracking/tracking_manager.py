@@ -114,19 +114,23 @@ class HybridTrackingManager:
         self.all_metrics.append(row)
 
     def save_summary_csv(self):
-        """Save all metrics to single CSV for analysis, appending to existing data"""
+        """Save all metrics to single CSV for analysis, with upsert logic:
+        overwrite existing rows for the same experiment_key, append new ones."""
         if not self.all_metrics:
             return None
 
         summary_path = self.metrics_dir / "training_results.csv"
         df_new = pd.DataFrame(self.all_metrics)
 
-        # Load existing data if it exists and append
+        # Load existing data if it exists and merge
         if summary_path.exists():
             df_existing = pd.read_csv(summary_path)
             df = pd.concat([df_existing, df_new], ignore_index=True)
         else:
             df = df_new
+
+        # Keep only the latest row for each experiment_key (upsert)
+        df = df.drop_duplicates(subset='experiment_key', keep='last')
 
         # Sort by F1 score
         df = df.sort_values('f1_score', ascending=False)

@@ -363,24 +363,28 @@ def main_with_hydra(cfg: DictConfig):
 
         # Keep only the required columns
         columns = [
-            'experiment_key', 'dataset', 'model', 'embedding',
+            'experiment_key', 'dataset', 'model', 'embedding', 'preprocessing',
             'test_type', 'num_samples',
             'accuracy', 'precision', 'recall', 'f1_score',
             'timestamp', 'confusion_matrix',
         ]
         combined_results = combined_results[[c for c in columns if c in combined_results.columns]]
 
-        # Append results to results.csv (create with header if file does not exist)
+        # Upsert: overwrite existing rows for the same experiment_key, append new ones
         output_path = Path(results_dir) / "results.csv"
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        file_exists = output_path.exists()
-        combined_results.to_csv(
-            output_path,
-            mode='a',
-            header=not file_exists,
-            index=False,
-        )
-        print(f"\n\nResults appended to {output_path}")
+
+        if output_path.exists():
+            df_existing = pd.read_csv(output_path)
+            df = pd.concat([df_existing, combined_results], ignore_index=True)
+        else:
+            df = combined_results
+
+        df = df.drop_duplicates(subset='experiment_key', keep='last')
+        df = df.sort_values('f1_score', ascending=False)
+        df.to_csv(output_path, index=False)
+
+        print(f"\n\nResults saved to {output_path}")
 
         # Print overall summary
         print("\n" + "=" * 100)
