@@ -110,7 +110,8 @@ models:
     max_depth: 5
     learning_rate: 0.1
     n_estimators: 100
-    tree_method: auto
+    tree_method: hist
+    n_jobs: -1
     optuna:
       max_depth:
         type: int
