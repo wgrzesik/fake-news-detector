@@ -5,9 +5,9 @@ seed: 42
 base_data_dir: "research/configs/datasets/processed"
 
 datasets_list:
-  - isot
-  - liar
-  - welfake
+  - ISOT
+  - LIAR
+  - WELFake
 
 models_to_optimize:
   - dt
