@@ -364,6 +364,36 @@ def plot_confusion_heatmaps(merged: pd.DataFrame, output_dir: Path) -> None:
         plt.close(fig)
 
 
+def save_f1_comparison(merged: pd.DataFrame, output_dir: Path) -> None:
+    """Save a concise TXT with model_label, training_f1, web_f1, delta_f1."""
+    needed = ["model_label", "f1_score_train", "f1_score_web", "delta_f1_score"]
+    if not all(c in merged.columns for c in needed):
+        return
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    comp = (
+        merged[needed]
+        .rename(columns={
+            "f1_score_train": "training_f1",
+            "f1_score_web": "web_f1",
+            "delta_f1_score": "delta_f1",
+        })
+        .sort_values("delta_f1", ascending=True)
+        .reset_index(drop=True)
+    )
+    comp.index += 1
+    comp.index.name = "rank"
+
+    txt_path = output_dir / "f1_comparison.txt"
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write(f"{'=' * 70}\n")
+        f.write(" F1 COMPARISON – TRAINING vs WEB\n")
+        f.write(f"{'=' * 70}\n\n")
+        f.write(comp.to_string())
+        f.write("\n")
+
+
 def save_summary(merged: pd.DataFrame, output_dir: Path) -> None:
     """Save a summary table to CSV and TXT."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -418,6 +448,9 @@ def save_summary(merged: pd.DataFrame, output_dir: Path) -> None:
 
     with open(txt_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
+
+    # Also generate the focused F1 comparison file
+    save_f1_comparison(merged, output_dir)
 
 
 def run_analysis_pipeline(
