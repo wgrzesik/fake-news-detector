@@ -66,7 +66,7 @@ def compare_within(
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     df = df.copy()
-    df["model_label"] = df["model"] + " + " + df["embedding"]
+    df["model_label"] = df["dataset"] + " + " + df["model"] + " + " + df["embedding"]
 
     # Sort – primary metric: f1_score, then accuracy
     ranking = (
@@ -163,7 +163,7 @@ def compare_between(
         merged = merged.sort_values("delta_f1_score", ascending=True).reset_index(drop=True)
 
     # Helper column for plots
-    merged["model_label"] = merged["model"] + " + " + merged["embedding"]
+    merged["model_label"] = merged["dataset"] + " + " + merged["model"] + " + " + merged["embedding"]
 
     return merged
 
@@ -222,49 +222,100 @@ def plot_train_vs_web_bars(merged: pd.DataFrame, output_dir: Path) -> None:
 
 
 def plot_generalization_scatter(merged: pd.DataFrame, output_dir: Path) -> None:
-    """Scatter plot: accuracy_train vs accuracy_web with y=x reference line."""
+    """Scatter plot: accuracy_train vs accuracy_web with y=x reference line.
+
+    Uses per-dataset subplots and color-coded model types for readability.
+    """
     if merged.empty:
         return
 
-    fig, ax = plt.subplots(figsize=(7, 7))
+    datasets = sorted(merged["dataset"].unique())
+    models = sorted(merged["model"].unique())
 
-    ax.scatter(
-        merged["accuracy_train"],
-        merged["accuracy_web"],
-        s=120,
-        c=[sns.color_palette("Set2")[2]],
-        edgecolors="black",
-        zorder=5,
+    # Colour palette keyed by model name
+    palette = dict(zip(models, sns.color_palette("tab10", len(models))))
+    # Marker styles cycled per model
+    marker_pool = ["o", "s", "D", "^", "v", "P", "X", "*", "h", "p"]
+    markers = {m: marker_pool[i % len(marker_pool)] for i, m in enumerate(models)}
+
+    n_datasets = len(datasets)
+    fig, axes = plt.subplots(
+        1, n_datasets,
+        figsize=(7 * n_datasets, 7),
+        squeeze=False,
     )
 
-    # Point labels
-    for _, row in merged.iterrows():
-        ax.annotate(
-            row["model_label"],
-            (row["accuracy_train"], row["accuracy_web"]),
-            textcoords="offset points",
-            xytext=(8, -8),
-            fontsize=9,
-        )
+    for col_idx, ds in enumerate(datasets):
+        ax = axes[0, col_idx]
+        subset = merged[merged["dataset"] == ds]
 
-    # Ideal y=x line
-    lims = [
-        min(ax.get_xlim()[0], ax.get_ylim()[0]),
-        max(ax.get_xlim()[1], ax.get_ylim()[1]),
+        for _, row in subset.iterrows():
+            m = row["model"]
+            ax.scatter(
+                row["accuracy_train"],
+                row["accuracy_web"],
+                s=140,
+                c=[palette[m]],
+                marker=markers[m],
+                edgecolors="black",
+                linewidths=0.6,
+                zorder=5,
+            )
+
+        # Stagger annotations so they don't overlap
+        texts_placed: list = []
+        for _, row in subset.iterrows():
+            short_label = f"{row['model']} + {row['embedding']}"
+            x_pt, y_pt = row["accuracy_train"], row["accuracy_web"]
+
+            # Choose offset direction to reduce overlap
+            x_off, y_off = 10, -10
+            for (px, py) in texts_placed:
+                if abs(px - x_pt) < 0.02 and abs(py - y_pt) < 0.02:
+                    y_off += 14  # shift down if close to another point
+            texts_placed.append((x_pt, y_pt))
+
+            ax.annotate(
+                short_label,
+                (x_pt, y_pt),
+                textcoords="offset points",
+                xytext=(x_off, y_off),
+                fontsize=8,
+                arrowprops=dict(arrowstyle="-", color="gray", lw=0.5),
+            )
+
+        # Ideal y=x line
+        lims = [
+            min(ax.get_xlim()[0], ax.get_ylim()[0]),
+            max(ax.get_xlim()[1], ax.get_ylim()[1]),
+        ]
+        ax.plot(lims, lims, "--", color="gray", alpha=0.6, label="Perfect generalization (y=x)")
+        ax.set_xlim(lims)
+        ax.set_ylim(lims)
+
+        ax.set_xlabel("Accuracy – Training")
+        ax.set_ylabel("Accuracy – Web-scraped")
+        ax.set_title(f"Generalization – {ds.upper()}")
+        ax.grid(alpha=0.3)
+
+    # Shared legend for model types
+    from matplotlib.lines import Line2D
+    legend_handles = [
+        Line2D([0], [0], marker=markers[m], color="w", markerfacecolor=palette[m],
+               markeredgecolor="black", markersize=9, label=m)
+        for m in models
     ]
-    ax.plot(lims, lims, "--", color="gray", alpha=0.6, label="Perfect generalization (y=x)")
-    ax.set_xlim(lims)
-    ax.set_ylim(lims)
+    legend_handles.append(
+        Line2D([0], [0], linestyle="--", color="gray", alpha=0.6, label="Perfect generalization (y=x)")
+    )
+    fig.legend(handles=legend_handles, loc="lower center", ncol=min(len(legend_handles), 6),
+               fontsize=9, frameon=True, bbox_to_anchor=(0.5, -0.04))
 
-    ax.set_xlabel("Accuracy – Training")
-    ax.set_ylabel("Accuracy – Web-scraped")
-    ax.set_title("Model Generalization: Training vs Web")
-    ax.legend(loc="lower right")
-    ax.grid(alpha=0.3)
-    fig.tight_layout()
+    fig.suptitle("Model Generalization: Training vs Web", fontsize=14)
+    fig.tight_layout(rect=[0, 0.04, 1, 0.96])
 
     path = output_dir / "generalization_scatter.png"
-    fig.savefig(path, dpi=150)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
