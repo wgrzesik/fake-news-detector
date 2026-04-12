@@ -1,12 +1,20 @@
+import random
 import time
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 import numpy as np
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 from newspaper import Article, ArticleException, Config as NewspaperConfig
+
+try:
+    import cloudscraper
+    _HAS_CLOUDSCRAPER = True
+except ImportError:
+    _HAS_CLOUDSCRAPER = False
 
 
 class NewsSource:
@@ -37,46 +45,158 @@ class NewsSource:
         'Cache-Control': 'max-age=0',
     }
 
-    @classmethod
-    def _fetch_full_text(cls, url: str, timeout: int = 15) -> str:
-        """Follow article URL and extract the full body text using newspaper3k.
+    # Rotate User-Agent strings to reduce fingerprint-based blocking
+    _USER_AGENTS = [
+        ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+         'AppleWebKit/537.36 (KHTML, like Gecko) '
+         'Chrome/124.0.0.0 Safari/537.36'),
+        ('Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) '
+         'AppleWebKit/605.1.15 (KHTML, like Gecko) '
+         'Version/17.4.1 Safari/605.1.15'),
+        ('Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) '
+         'Gecko/20100101 Firefox/125.0'),
+        ('Mozilla/5.0 (X11; Linux x86_64) '
+         'AppleWebKit/537.36 (KHTML, like Gecko) '
+         'Chrome/124.0.0.0 Safari/537.36'),
+        ('Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) '
+         'AppleWebKit/537.36 (KHTML, like Gecko) '
+         'Chrome/124.0.0.0 Safari/537.36'),
+    ]
 
-        First attempts a download via newspaper3k with a browser-like config.
-        If that fails (e.g. 403), falls back to fetching the HTML manually
-        with a full set of browser headers and feeding it to newspaper3k
-        for parsing only.
-        """
+    @classmethod
+    def _build_headers(cls, url: str, ua: str | None = None) -> dict:
+        """Build realistic browser headers with Referer matching the target domain."""
+        parsed = urlparse(url)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        headers = dict(cls._BROWSER_HEADERS)
+        headers['User-Agent'] = ua or random.choice(cls._USER_AGENTS)
+        headers['Referer'] = origin + "/"
+        headers['Origin'] = origin
+        return headers
+
+    @classmethod
+    def _parse_html_with_newspaper(cls, html: str, url: str,
+                                   timeout: int = 15) -> str:
+        """Feed raw HTML into newspaper3k and return extracted text."""
         config = NewspaperConfig()
         config.browser_user_agent = cls._BROWSER_HEADERS['User-Agent']
         config.request_timeout = timeout
         config.fetch_images = False
+        article = Article(url, config=config)
+        article.set_html(html)
+        article.parse()
+        text = (article.text or "").strip()
+        return text if len(text) > 100 else ""
 
+    @classmethod
+    def _try_newspaper_download(cls, url: str, timeout: int = 15) -> str:
+        """Strategy 1: let newspaper3k download & parse on its own."""
+        config = NewspaperConfig()
+        config.browser_user_agent = random.choice(cls._USER_AGENTS)
+        config.request_timeout = timeout
+        config.fetch_images = False
+        article = Article(url, config=config)
+        article.download()
+        article.parse()
+        text = (article.text or "").strip()
+        return text if len(text) > 100 else ""
 
+    @classmethod
+    def _try_session_with_cookies(cls, url: str, timeout: int = 15) -> str:
+        """Strategy 2: requests session — visit homepage first to acquire
+        cookies, then fetch the article with a realistic Referer."""
+        parsed = urlparse(url)
+        home = f"{parsed.scheme}://{parsed.netloc}"
+        headers = cls._build_headers(url)
+
+        session = requests.Session()
+        # Warm up: visit the homepage to collect cookies / pass JS-free checks
         try:
-            article = Article(url, config=config)
-            article.download()
-            article.parse()
-            text = (article.text or "").strip()
-            if len(text) > 100:
-                return text
-        except (ArticleException, Exception):
-            pass  # fall through to manual fetch
+            session.get(home, headers=headers, timeout=timeout,
+                        allow_redirects=True)
+        except Exception:
+            pass  # not fatal — some sites don't need it
 
-        try:
-            session = requests.Session()
-            resp = session.get(url, headers=cls._BROWSER_HEADERS,
-                               timeout=timeout, allow_redirects=True)
-            resp.raise_for_status()
+        resp = session.get(url, headers=headers, timeout=timeout,
+                           allow_redirects=True)
+        resp.raise_for_status()
+        return cls._parse_html_with_newspaper(resp.text, url, timeout)
 
-            article = Article(url, config=config)
-            article.set_html(resp.text)
-            article.parse()
-            text = (article.text or "").strip()
-            if len(text) > 100:
-                return text
-        except Exception as e:
-            print(f"Could not fetch full text from {url}: {e}")
+    @classmethod
+    def _try_cloudscraper(cls, url: str, timeout: int = 15) -> str:
+        """Strategy 3: cloudscraper — bypasses Cloudflare & many anti-bot
+        systems by solving JS challenges automatically."""
+        if not _HAS_CLOUDSCRAPER:
+            return ""
+        scraper = cloudscraper.create_scraper(
+            browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False}
+        )
+        headers = cls._build_headers(url)
+        resp = scraper.get(url, headers=headers, timeout=timeout,
+                           allow_redirects=True)
+        resp.raise_for_status()
+        return cls._parse_html_with_newspaper(resp.text, url, timeout)
 
+    @classmethod
+    def _try_google_cache(cls, url: str, timeout: int = 15) -> str:
+        """Strategy 4: fetch Google's cached version of the page."""
+        cache_url = (
+            f"https://webcache.googleusercontent.com/search?q=cache:{url}"
+        )
+        headers = cls._build_headers(cache_url)
+        resp = requests.get(cache_url, headers=headers, timeout=timeout,
+                            allow_redirects=True)
+        resp.raise_for_status()
+        return cls._parse_html_with_newspaper(resp.text, url, timeout)
+
+    @classmethod
+    def _try_wayback_machine(cls, url: str, timeout: int = 20) -> str:
+        """Strategy 5: fetch the most recent snapshot from the Wayback Machine."""
+        api_url = f"https://archive.org/wayback/available?url={url}"
+        meta = requests.get(api_url, timeout=timeout).json()
+        snapshots = meta.get("archived_snapshots", {})
+        closest = snapshots.get("closest", {})
+        archive_url = closest.get("url")
+        if not archive_url:
+            return ""
+        headers = cls._build_headers(archive_url)
+        resp = requests.get(archive_url, headers=headers, timeout=timeout,
+                            allow_redirects=True)
+        resp.raise_for_status()
+        return cls._parse_html_with_newspaper(resp.text, url, timeout)
+
+    @classmethod
+    def _fetch_full_text(cls, url: str, timeout: int = 15) -> str:
+        """Follow article URL and extract the full body text.
+
+        Tries five strategies in order, returning the first successful result:
+        1. newspaper3k native download
+        2. requests session with cookie pre-fetch & Referer
+        3. cloudscraper (anti-bot bypass)
+        4. Google Web Cache
+        5. Wayback Machine (Internet Archive)
+        """
+        strategies = [
+            ("newspaper", cls._try_newspaper_download),
+            ("session+cookies", cls._try_session_with_cookies),
+            ("cloudscraper", cls._try_cloudscraper),
+            ("google_cache", cls._try_google_cache),
+            ("wayback", cls._try_wayback_machine),
+        ]
+
+        last_error = None
+        for name, fn in strategies:
+            try:
+                text = fn(url, timeout=timeout)
+                if text:
+                    return text
+            except Exception as e:
+                last_error = e
+                continue  # try next strategy
+
+        if last_error is not None:
+            print(f"Could not fetch full text from {url} "
+                  f"(all strategies failed; last error: {last_error})")
         return ""
 
     def fetch(self, num_articles: int = 10, fetch_full_text: bool = False,
