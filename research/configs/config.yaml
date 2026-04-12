@@ -4,6 +4,12 @@ defaults:
 seed: 42
 base_data_dir: "research/configs/datasets/processed"
 
+# Resume training after disconnection (e.g. Google Colab timeout).
+# Completed experiments are detected from experiments/metrics/training_results.csv.
+# Transformer epoch checkpoints are saved to saved_models/ (symlinked to Drive).
+resume: true
+save_checkpoints: true
+
 datasets_list:
   - ISOT
   - LIAR
@@ -139,6 +145,8 @@ models:
     weight_decay: 0.01
     warmup_ratio: 0.1
     gradient_accumulation_steps: 1
+    fp16: true
+    save_checkpoints: true
     optuna:
       learning_rate:
         type: float
@@ -169,6 +177,8 @@ models:
     weight_decay: 0.01
     warmup_ratio: 0.1
     gradient_accumulation_steps: 1
+    fp16: true
+    save_checkpoints: true
     optuna:
       learning_rate:
         type: float
@@ -220,6 +230,8 @@ web_scraping:
   num_real_samples: 5000
   num_fake_samples: 5000
   output_dir: "research/configs/web_scraped_data"
+  scrape_full_articles: true  # Also fetch full article body from each URL
+  full_article_filename: "web_scraped_news_full.csv"
 
 # Web testing
 web_testing:

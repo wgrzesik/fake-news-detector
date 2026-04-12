@@ -280,42 +280,27 @@ class WebTestRunner:
         print(f"Report saved to {output_path}")
 
 
-def main_with_hydra(cfg: DictConfig):
-    """Main function with Hydra configuration support"""
-    print("\n" + "=" * 100)
-    print("WEB DATA TESTING")
-    print("=" * 100)
+def _run_evaluation_for_web_variant(
+        cfg, datasets, models_list, embeddings_list, preprocessing_name,
+        results_dir, web_data_path, text_type: str
+):
+    """Run evaluation on a single web-data variant (short or full_article).
 
-    # Get configuration values
-    datasets = cfg.get('datasets_list', [cfg.datasets.name])
-    models_list = cfg.get('models_to_optimize', [cfg.models.name])
-    embeddings_list = cfg.get('embeddings_to_use', [cfg.embeddings.name])
-    preprocessing_name = cfg.get('preprocessing', {}).get('name', 'classic')
-    results_dir = cfg.get('results_dir', './experiments/web_test_results')
-    
-    print(f"\nConfiguration loaded:")
-    print(f"  Datasets: {datasets}")
-    print(f"  Models: {models_list}")
-    print(f"  Embeddings: {embeddings_list}")
-    print(f"  Preprocessing: {preprocessing_name}")
-    print(f"  Results dir: {results_dir}\n")
-
-    # Load web data
-    web_data_path = cfg.web_scraping.output_dir + "/web_scraped_news.csv"
+    Returns a list of result DataFrames (one per dataset).
+    """
     if not Path(web_data_path).exists():
         print(f"[Warning] Web data not found at {web_data_path}")
-        print("Skipping web testing")
-        return
+        print(f"Skipping web testing for text_type='{text_type}'")
+        return []
 
     web_data = pd.read_csv(web_data_path)
     web_data = web_data.dropna(subset=['text', 'label'])
-    print(f"Loaded {len(web_data)} valid samples for testing.\n")
+    print(f"Loaded {len(web_data)} valid samples for testing (text_type='{text_type}').\n")
 
-    # Run tests for each dataset
     all_results = []
     for dataset_name in datasets:
         print("\n" + "=" * 100)
-        print(f"TESTING DATASET: {dataset_name.upper()}")
+        print(f"TESTING DATASET: {dataset_name.upper()} | text_type: {text_type}")
         print("=" * 100)
 
         try:
@@ -338,11 +323,17 @@ def main_with_hydra(cfg: DictConfig):
         )
 
         if not web_results.empty:
+            # Tag every result with the text type so short vs full can be distinguished
+            web_results['text_type'] = text_type
+            # Make experiment_key unique per text_type
+            web_results['experiment_key'] = (
+                web_results['experiment_key'] + f"_{text_type}"
+            )
             all_results.append(web_results)
 
             # Print dataset summary
             print("\n" + "-" * 100)
-            print(f"DATASET SUMMARY: {dataset_name.upper()}")
+            print(f"DATASET SUMMARY: {dataset_name.upper()} ({text_type})")
             print("-" * 100)
             print(f"Total models tested: {len(web_results)}")
             print(f"Average F1 Score: {web_results['f1_score'].mean():.4f}")
@@ -354,66 +345,138 @@ def main_with_hydra(cfg: DictConfig):
                 'model', 'embedding', 'f1_score', 'accuracy'
             ]].to_string(index=False))
 
-    # Combined results - save to single file
-    if all_results:
-        combined_results = pd.concat(all_results, ignore_index=True)
-        
-        # Sort by F1 score
-        combined_results = combined_results.sort_values('f1_score', ascending=False)
+    return all_results
 
-        # Keep only the required columns
-        columns = [
-            'experiment_key', 'dataset', 'model', 'embedding', 'preprocessing',
-            'test_type', 'num_samples',
-            'accuracy', 'precision', 'recall', 'f1_score',
-            'timestamp', 'confusion_matrix',
-        ]
-        combined_results = combined_results[[c for c in columns if c in combined_results.columns]]
 
-        # Upsert: overwrite existing rows for the same experiment_key, append new ones
-        output_path = Path(results_dir) / "results.csv"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+def _save_and_print_summary(all_results, results_dir):
+    """Merge, upsert, save combined results and print summary."""
+    if not all_results:
+        return
 
-        if output_path.exists():
-            df_existing = pd.read_csv(output_path)
-            df = pd.concat([df_existing, combined_results], ignore_index=True)
-        else:
-            df = combined_results
+    combined_results = pd.concat(all_results, ignore_index=True)
+    combined_results = combined_results.sort_values('f1_score', ascending=False)
 
-        df = df.drop_duplicates(subset='experiment_key', keep='last')
-        df = df.sort_values('f1_score', ascending=False)
-        df.to_csv(output_path, index=False)
+    # Keep only the required columns
+    columns = [
+        'experiment_key', 'dataset', 'model', 'embedding', 'preprocessing',
+        'test_type', 'text_type', 'num_samples',
+        'accuracy', 'precision', 'recall', 'f1_score',
+        'timestamp', 'confusion_matrix',
+    ]
+    combined_results = combined_results[[c for c in columns if c in combined_results.columns]]
 
-        print(f"\n\nResults saved to {output_path}")
+    # Upsert: overwrite existing rows for the same experiment_key, append new ones
+    output_path = Path(results_dir) / "results.csv"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Print overall summary
-        print("\n" + "=" * 100)
-        print("OVERALL RESULTS SUMMARY")
-        print("=" * 100)
-        print(f"\nTotal models tested: {len(combined_results)}")
-        print(f"Average F1 Score: {combined_results['f1_score'].mean():.4f}")
-        print(f"Best F1 Score: {combined_results['f1_score'].max():.4f}")
-        print(f"Worst F1 Score: {combined_results['f1_score'].min():.4f}\n")
+    if output_path.exists():
+        df_existing = pd.read_csv(output_path)
+        df = pd.concat([df_existing, combined_results], ignore_index=True)
+    else:
+        df = combined_results
 
-        print("Top 10 Models (across all datasets):")
-        print(combined_results.nlargest(10, 'f1_score')[[
-            'dataset', 'model', 'embedding', 'f1_score', 'accuracy'
-        ]].to_string(index=False))
+    df = df.drop_duplicates(subset='experiment_key', keep='last')
+    df = df.sort_values('f1_score', ascending=False)
+    df.to_csv(output_path, index=False)
 
-        print("\nBottom 5 Models:")
-        print(combined_results.nsmallest(5, 'f1_score')[[
-            'dataset', 'model', 'embedding', 'f1_score', 'accuracy'
-        ]].to_string(index=False))
+    print(f"\n\nResults saved to {output_path}")
 
-        # Summary by dataset
+    # Print overall summary
+    print("\n" + "=" * 100)
+    print("OVERALL RESULTS SUMMARY")
+    print("=" * 100)
+    print(f"\nTotal models tested: {len(combined_results)}")
+    print(f"Average F1 Score: {combined_results['f1_score'].mean():.4f}")
+    print(f"Best F1 Score: {combined_results['f1_score'].max():.4f}")
+    print(f"Worst F1 Score: {combined_results['f1_score'].min():.4f}\n")
+
+    print("Top 10 Models (across all datasets):")
+    print(combined_results.nlargest(10, 'f1_score')[[
+        'dataset', 'model', 'embedding', 'text_type', 'f1_score', 'accuracy'
+    ]].to_string(index=False))
+
+    print("\nBottom 5 Models:")
+    print(combined_results.nsmallest(5, 'f1_score')[[
+        'dataset', 'model', 'embedding', 'text_type', 'f1_score', 'accuracy'
+    ]].to_string(index=False))
+
+    # Summary by dataset
+    print("\n" + "-" * 100)
+    print("SUMMARY BY DATASET")
+    print("-" * 100)
+    by_dataset = combined_results.groupby('dataset').agg({
+        'f1_score': ['count', 'mean', 'max', 'min', 'std'],
+        'accuracy': 'mean'
+    }).round(4)
+    print(by_dataset)
+
+    # Summary by text_type (short vs full_article)
+    if 'text_type' in combined_results.columns:
         print("\n" + "-" * 100)
-        print("SUMMARY BY DATASET")
+        print("SUMMARY BY TEXT TYPE (short vs full_article)")
         print("-" * 100)
-        by_dataset = combined_results.groupby('dataset').agg({
+        by_text_type = combined_results.groupby('text_type').agg({
             'f1_score': ['count', 'mean', 'max', 'min', 'std'],
             'accuracy': 'mean'
         }).round(4)
-        print(by_dataset)
+        print(by_text_type)
+
+
+def main_with_hydra(cfg: DictConfig):
+    """Main function with Hydra configuration support"""
+    print("\n" + "=" * 100)
+    print("WEB DATA TESTING")
+    print("=" * 100)
+
+    # Get configuration values
+    datasets = cfg.get('datasets_list', [cfg.datasets.name])
+    models_list = cfg.get('models_to_optimize', [cfg.models.name])
+    embeddings_list = cfg.get('embeddings_to_use', [cfg.embeddings.name])
+    preprocessing_name = cfg.get('preprocessing', {}).get('name', 'classic')
+    results_dir = cfg.get('results_dir', './experiments/web_test_results')
+
+    full_article_filename = cfg.web_scraping.get(
+        'full_article_filename', 'web_scraped_news_full.csv'
+    )
+    scrape_full_articles = cfg.web_scraping.get('scrape_full_articles', False)
+
+    print(f"\nConfiguration loaded:")
+    print(f"  Datasets: {datasets}")
+    print(f"  Models: {models_list}")
+    print(f"  Embeddings: {embeddings_list}")
+    print(f"  Preprocessing: {preprocessing_name}")
+    print(f"  Results dir: {results_dir}")
+    print(f"  Full-article evaluation: {scrape_full_articles}\n")
+
+    all_results = []
+
+    # Evaluate on SHORT text (RSS descriptions)
+    short_path = cfg.web_scraping.output_dir + "/web_scraped_news.csv"
+    print("\n" + "#" * 100)
+    print("  PHASE 1: SHORT TEXT (RSS descriptions)")
+    print("#" * 100)
+    short_results = _run_evaluation_for_web_variant(
+        cfg, datasets, models_list, embeddings_list,
+        preprocessing_name, results_dir, short_path,
+        text_type="short"
+    )
+    all_results.extend(short_results)
+
+    # Evaluate on FULL ARTICLES (if available)
+    if scrape_full_articles:
+        full_path = cfg.web_scraping.output_dir + "/" + full_article_filename
+        print("\n" + "#" * 100)
+        print("  PHASE 2: FULL ARTICLES")
+        print("#" * 100)
+        full_results = _run_evaluation_for_web_variant(
+            cfg, datasets, models_list, embeddings_list,
+            preprocessing_name, results_dir, full_path,
+            text_type="full_article"
+        )
+        all_results.extend(full_results)
+
+    # Save combined results
+    _save_and_print_summary(all_results, results_dir)
 
     print("\n" + "=" * 100 + "\n")
 

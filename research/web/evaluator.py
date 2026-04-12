@@ -163,7 +163,7 @@ class WebTestEvaluator:
         # Keep only the canonical columns
         columns = [
             'experiment_key', 'dataset', 'model', 'embedding', 'preprocessing',
-            'test_type', 'num_samples',
+            'test_type', 'text_type', 'num_samples',
             'accuracy', 'precision', 'recall', 'f1_score',
             'timestamp', 'confusion_matrix',
         ]

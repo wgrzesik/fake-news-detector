@@ -19,6 +19,26 @@ from research.configs.preprocessing.preprocessor import TextPreprocessor
 from research.tracking.tracking_manager import HybridTrackingManager
 
 
+def get_completed_experiments(results_dir: str) -> set:
+    """Load experiment keys that already finished successfully.
+
+    Reads experiments/metrics/training_results.csv (persisted on Google
+    Drive via colab_setup symlinks) and returns a set of experiment_key
+    strings like ``ISOT_bert_bert-base-uncased``.
+    """
+    csv_path = os.path.join(os.path.abspath(results_dir), "metrics", "training_results.csv")
+    if not os.path.exists(csv_path):
+        return set()
+    try:
+        df = pd.read_csv(csv_path)
+        keys = set(df["experiment_key"].dropna().unique())
+        print(f"[Resume] Found {len(keys)} completed experiment(s) in {csv_path}")
+        return keys
+    except Exception as e:
+        print(f"[Resume] Could not read results CSV: {e}")
+        return set()
+
+
 def set_seed(seed: int):
     """Set random seeds for reproducibility"""
     random.seed(seed)
@@ -314,6 +334,14 @@ def main(cfg: DictConfig):
     )
     failed_experiments = []
 
+    # Resume support: skip experiments that already completed
+    resume_enabled = cfg.get("resume", True)
+    completed_keys: set = set()
+    if resume_enabled:
+        completed_keys = get_completed_experiments(
+            cfg.get("results_dir", "./experiments")
+        )
+
     # Main loop: Datasets -> Models -> Embeddings
     for dataset_idx, dataset_name in enumerate(datasets, 1):
         print(f"\n{'#'*100}")
@@ -375,6 +403,12 @@ def main(cfg: DictConfig):
                 exp_id = f"[{experiment_count}/{total_combinations}]"
                 print(f"\n{exp_id} {dataset_name.upper()} | {model_name.upper()} | {embedding_name.upper()}")
                 print("-" * 100)
+
+                # Skip already-completed experiments (resume after Colab disconnect)
+                experiment_key = f"{dataset_name}_{model_name}_{embedding_name}"
+                if experiment_key in completed_keys:
+                    print(f"  ⏭️ SKIP (already completed) — {experiment_key}")
+                    continue
 
                 is_transformer = ModelFactory.is_transformer_model(model_name)
 

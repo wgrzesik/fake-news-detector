@@ -1,8 +1,11 @@
+import json
 import os
-from typing import List, Dict, Any
+import shutil
+from typing import List, Dict, Any, Optional
 
 import numpy as np
 import torch
+from torch.amp import GradScaler, autocast
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from torch.utils.data import DataLoader, Dataset
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, get_linear_schedule_with_warmup
@@ -63,9 +66,18 @@ class TransformerBaseModel(BaseModel):
         self.weight_decay = float(kwargs.get("weight_decay", 0.01))
         self.warmup_ratio = float(kwargs.get("warmup_ratio", 0.1))
         self.gradient_accumulation_steps = int(kwargs.get("gradient_accumulation_steps", 1))
+        self.fp16 = bool(kwargs.get("fp16", False))
+        self.save_checkpoints = bool(kwargs.get("save_checkpoints", True))
 
         # Device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Mixed Precision – only when GPU is available
+        self.use_fp16 = self.fp16 and self.device.type == "cuda"
+        self.grad_scaler = GradScaler(enabled=self.use_fp16)
+
+        # Checkpoint directory (persisted to Google Drive via colab_setup symlinks)
+        self._checkpoint_dir: Optional[str] = None
 
         # Will be initialised in _build_model()
         self.tokenizer = None
@@ -86,11 +98,120 @@ class TransformerBaseModel(BaseModel):
             num_labels=2,
         ).to(self.device)
 
+    # Checkpoint management (Google Drive persistence)
+
+    @property
+    def checkpoint_dir(self) -> str:
+        """Return (and lazily create) the checkpoint directory."""
+        if self._checkpoint_dir is None:
+            self._checkpoint_dir = os.path.join(
+                self.get_model_path(), "checkpoints"
+            )
+        os.makedirs(self._checkpoint_dir, exist_ok=True)
+        return self._checkpoint_dir
+
+    def _save_checkpoint(
+        self,
+        epoch: int,
+        optimizer: torch.optim.Optimizer,
+        scheduler,
+        grad_scaler: GradScaler,
+        epoch_loss: float,
+    ) -> str:
+        """Save a training checkpoint after an epoch.
+
+        Saved to  saved_models/<dataset>/<model>/checkpoints/
+        which is symlinked to Google Drive by colab_setup.py.
+        """
+        ckpt_path = os.path.join(self.checkpoint_dir, "ckpt_latest")
+        os.makedirs(ckpt_path, exist_ok=True)
+
+        # Model weights & tokenizer (HuggingFace format — easy to reload)
+        self.transformer_model.save_pretrained(ckpt_path)
+        self.tokenizer.save_pretrained(ckpt_path)
+
+        # Optimizer, scheduler, scaler, meta
+        torch.save(
+            {
+                "epoch": epoch,
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "grad_scaler_state_dict": grad_scaler.state_dict(),
+                "epoch_loss": epoch_loss,
+            },
+            os.path.join(ckpt_path, "training_state.pt"),
+        )
+
+        # Human-readable meta
+        meta = {
+            "epoch": epoch,
+            "num_epochs": self.num_epochs,
+            "epoch_loss": epoch_loss,
+            "model_name": self.model_name,
+            "dataset_name": self.dataset_name,
+            "learning_rate": self.learning_rate,
+            "batch_size": self.batch_size,
+            "fp16": self.use_fp16,
+        }
+        with open(os.path.join(ckpt_path, "meta.json"), "w") as f:
+            json.dump(meta, f, indent=2)
+
+        print(f"Checkpoint saved (epoch {epoch + 1}/{self.num_epochs}) → {ckpt_path}")
+        return ckpt_path
+
+    def _load_checkpoint(
+        self,
+        optimizer: torch.optim.Optimizer,
+        scheduler,
+        grad_scaler: GradScaler,
+    ) -> int:
+        """Try to resume from the latest checkpoint.
+
+        Returns the epoch to resume from (0 if no checkpoint found).
+        """
+        ckpt_path = os.path.join(self.checkpoint_dir, "ckpt_latest")
+        state_file = os.path.join(ckpt_path, "training_state.pt")
+
+        if not os.path.exists(state_file):
+            return 0  # no checkpoint — start from scratch
+
+        print(f"Resuming from checkpoint: {ckpt_path}")
+
+        # Restore model weights
+        self.transformer_model = AutoModelForSequenceClassification.from_pretrained(
+            ckpt_path, num_labels=2
+        ).to(self.device)
+
+        # Restore training state
+        state = torch.load(state_file, map_location=self.device, weights_only=False)
+        optimizer.load_state_dict(state["optimizer_state_dict"])
+        scheduler.load_state_dict(state["scheduler_state_dict"])
+        grad_scaler.load_state_dict(state["grad_scaler_state_dict"])
+
+        resume_epoch = state["epoch"] + 1  # start from the NEXT epoch
+        print(f"Resuming training from epoch {resume_epoch + 1}/{self.num_epochs} "
+              f"(last completed epoch loss: {state['epoch_loss']:.4f})")
+        return resume_epoch
+
+    def _clear_checkpoint(self):
+        """Remove checkpoint directory after training completes successfully."""
+        ckpt_path = os.path.join(self.checkpoint_dir, "ckpt_latest")
+        if os.path.exists(ckpt_path):
+            shutil.rmtree(ckpt_path, ignore_errors=True)
+            print(f"Checkpoint cleared: {ckpt_path}")
+
+    # Training
     def train(self, X_train_raw: List[str], y_train: List[int]) -> None:
-        """Fine-tune the transformer on raw text."""
+        """Fine-tune the transformer on raw text.
+
+        Automatically saves a checkpoint after every epoch (to Google Drive
+        when running on Colab) and resumes from the latest checkpoint if one
+        exists.
+        """
         print(f"Training {self.model_name} on {self.device} "
               f"(lr={self.learning_rate}, epochs={self.num_epochs}, "
-              f"batch={self.batch_size}, max_len={self.max_length})")
+              f"batch={self.batch_size}, max_len={self.max_length}, "
+              f"fp16={self.use_fp16}, checkpoints={self.save_checkpoints})")
 
         dataset = TextClassificationDataset(
             X_train_raw, y_train, self.tokenizer, self.max_length
@@ -117,8 +238,17 @@ class TransformerBaseModel(BaseModel):
             num_training_steps=total_steps,
         )
 
+        # Try to resume from checkpoint
+        start_epoch = 0
+        if self.save_checkpoints:
+            start_epoch = self._load_checkpoint(optimizer, scheduler, self.grad_scaler)
+
+        if start_epoch >= self.num_epochs:
+            print(f"All {self.num_epochs} epochs already completed (checkpoint). Skipping training.")
+            return
+
         self.transformer_model.train()
-        for epoch in range(self.num_epochs):
+        for epoch in range(start_epoch, self.num_epochs):
             epoch_loss = 0.0
             optimizer.zero_grad()
             for step, batch in enumerate(dataloader):
@@ -126,23 +256,35 @@ class TransformerBaseModel(BaseModel):
                 attention_mask = batch["attention_mask"].to(self.device)
                 labels = batch["label"].to(self.device)
 
-                outputs = self.transformer_model(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    labels=labels,
-                )
-                loss = outputs.loss / self.gradient_accumulation_steps
-                loss.backward()
+                with autocast(device_type=self.device.type, enabled=self.use_fp16):
+                    outputs = self.transformer_model(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        labels=labels,
+                    )
+                    loss = outputs.loss / self.gradient_accumulation_steps
+
+                self.grad_scaler.scale(loss).backward()
                 epoch_loss += loss.item() * self.gradient_accumulation_steps
 
                 if (step + 1) % self.gradient_accumulation_steps == 0:
+                    self.grad_scaler.unscale_(optimizer)
                     torch.nn.utils.clip_grad_norm_(self.transformer_model.parameters(), 1.0)
-                    optimizer.step()
+                    self.grad_scaler.step(optimizer)
+                    self.grad_scaler.update()
                     scheduler.step()
                     optimizer.zero_grad()
 
             avg_loss = epoch_loss / len(dataloader)
             print(f"  Epoch {epoch + 1}/{self.num_epochs} — loss: {avg_loss:.4f}")
+
+            # Save checkpoint after each epoch
+            if self.save_checkpoints:
+                self._save_checkpoint(epoch, optimizer, scheduler, self.grad_scaler, avg_loss)
+
+        # Training complete — remove checkpoint to save space
+        if self.save_checkpoints:
+            self._clear_checkpoint()
 
     def train_on_vectors(self, X_vec, y_train: List[int]) -> None:
         """Transformer models don't use pre-computed vectors — redirect to train()."""
@@ -189,11 +331,12 @@ class TransformerBaseModel(BaseModel):
                 input_ids = batch["input_ids"].to(self.device)
                 attention_mask = batch["attention_mask"].to(self.device)
 
-                outputs = self.transformer_model(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                )
-                logits = outputs.logits
+                with autocast(device_type=self.device.type, enabled=self.use_fp16):
+                    outputs = self.transformer_model(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                    )
+                logits = outputs.logits.float()  # ensure float32 for softmax
                 probs = torch.softmax(logits, dim=-1)
                 preds = torch.argmax(logits, dim=-1)
 
