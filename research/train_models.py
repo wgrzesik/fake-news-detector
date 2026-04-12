@@ -23,6 +23,13 @@ def set_seed(seed: int):
     """Set random seeds for reproducibility"""
     random.seed(seed)
     np.random.seed(seed)
+    try:
+        import torch
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+    except ImportError:
+        pass
 
 
 def load_data(base_dir: str, dataset_name: str, split_type: str):
@@ -110,6 +117,12 @@ def get_predictions_and_probs(model, X_test_vec: np.ndarray):
     return y_pred, y_probs
 
 
+def get_predictions_and_probs_transformer(model, X_test_texts: List[str]):
+    """Get predictions and probabilities from a transformer model (operates on raw text)."""
+    y_pred, y_probs = model._predict_batch(X_test_texts)
+    return y_pred, y_probs
+
+
 def run_single_trial(
     trial: optuna.Trial,
     cfg: DictConfig,
@@ -176,6 +189,73 @@ def run_single_trial(
 
     except Exception as e:
         print(f"Trial {trial.number} FAILED: {str(e)}")
+        return 0.0
+
+
+def run_single_trial_transformer(
+    trial: optuna.Trial,
+    cfg: DictConfig,
+    X_train_texts: List[str],
+    X_test_texts: List[str],
+    y_train: List[int],
+    y_test: List[int],
+    model_name: str,
+    embedding_name: str,
+    dataset_name: str,
+    preprocessing_name: str,
+):
+    """Run a single Optuna trial for a transformer model (operates on raw text)."""
+    try:
+        # Get model config and optuna search space
+        model_config = OmegaConf.to_container(cfg.models.get(model_name, {}))
+        optuna_config = model_config.pop('optuna', {})
+
+        # Suggest hyperparameters
+        suggested_params = suggest_model_params(trial, optuna_config)
+
+        # Merge with base model params
+        model_params = {**model_config, **suggested_params}
+        model_params.pop('optuna', None)
+
+        trial_run_name = (
+            f"{dataset_name}_{model_name}_{embedding_name}_{preprocessing_name}_trial{trial.number}"
+        )
+
+        # Start nested MLflow run for this trial
+        with mlflow.start_run(run_name=trial_run_name, nested=True):
+            mlflow.log_params({
+                "trial_number": trial.number,
+                **suggested_params
+            })
+
+            # Create transformer model
+            model = ModelFactory.get_model(
+                dataset_name=dataset_name,
+                model_type=model_name,
+                embedding_type=embedding_name,
+                **model_params
+            )
+
+            # Train on raw text
+            model.train(X_train_texts, y_train)
+
+            # Evaluate on raw text
+            metrics = model.evaluate(X_test_texts, y_test)
+
+            # Log metrics
+            mlflow.log_metrics({
+                "trial_accuracy": metrics["accuracy"],
+                "trial_f1_score": metrics["f1_score"],
+                "trial_precision": metrics["precision"],
+                "trial_recall": metrics["recall"],
+            })
+
+            trial_f1 = metrics["f1_score"]
+            return trial_f1
+
+    except Exception as e:
+        print(f"Trial {trial.number} FAILED: {str(e)}")
+        traceback.print_exc()
         return 0.0
 
 
@@ -296,20 +376,30 @@ def main(cfg: DictConfig):
                 print(f"\n{exp_id} {dataset_name.upper()} | {model_name.upper()} | {embedding_name.upper()}")
                 print("-" * 100)
 
+                is_transformer = ModelFactory.is_transformer_model(model_name)
+
                 try:
                     # Validate compatibility
                     validate_compatibility(model_name, embedding_name, preprocessing_name)
 
-                    print(f"[Embedding] {embedding_name}")
-                    t_emb_start = datetime.now()
-                    X_train_vec, embedder = embed_data(
-                        X_train_preprocessed, embedding_name, fit=True
-                    )
-                    X_test_vec, _ = embed_data(
-                        X_test_preprocessed, embedding_name, fit=False, embedder=embedder
-                    )
-                    emb_time = (datetime.now() - t_emb_start).total_seconds()
-                    print(f"Vectorized: {X_train_vec.shape} ({emb_time:.2f}s)")
+                    # Embedding step (skipped for transformers) ──
+                    embedder = None
+                    X_train_vec = None
+                    X_test_vec = None
+
+                    if not is_transformer:
+                        print(f"[Embedding] {embedding_name}")
+                        t_emb_start = datetime.now()
+                        X_train_vec, embedder = embed_data(
+                            X_train_preprocessed, embedding_name, fit=True
+                        )
+                        X_test_vec, _ = embed_data(
+                            X_test_preprocessed, embedding_name, fit=False, embedder=embedder
+                        )
+                        emb_time = (datetime.now() - t_emb_start).total_seconds()
+                        print(f"Vectorized: {X_train_vec.shape} ({emb_time:.2f}s)")
+                    else:
+                        print(f"[Transformer] Tokenization handled internally by {model_name}")
 
                     run_name = (
                         f"{dataset_name}_{model_name}_{embedding_name}_{preprocessing_name}"
@@ -353,20 +443,36 @@ def main(cfg: DictConfig):
                                 study_name=run_name,
                             )
 
-                        def objective(trial):
-                            return run_single_trial(
-                                trial=trial,
-                                cfg=cfg,
-                                X_train_vec=X_train_vec,
-                                X_test_vec=X_test_vec,
-                                y_train=y_train,
-                                y_test=y_test,
-                                model_name=model_name,
-                                embedding_name=embedding_name,
-                                dataset_name=dataset_name,
-                                preprocessing_name=preprocessing_name,
-                                embedding_object=embedder
-                            )
+                        # Define objective (transformer vs classic) ──
+                        if is_transformer:
+                            def objective(trial):
+                                return run_single_trial_transformer(
+                                    trial=trial,
+                                    cfg=cfg,
+                                    X_train_texts=X_train_preprocessed,
+                                    X_test_texts=X_test_preprocessed,
+                                    y_train=y_train,
+                                    y_test=y_test,
+                                    model_name=model_name,
+                                    embedding_name=embedding_name,
+                                    dataset_name=dataset_name,
+                                    preprocessing_name=preprocessing_name,
+                                )
+                        else:
+                            def objective(trial):
+                                return run_single_trial(
+                                    trial=trial,
+                                    cfg=cfg,
+                                    X_train_vec=X_train_vec,
+                                    X_test_vec=X_test_vec,
+                                    y_train=y_train,
+                                    y_test=y_test,
+                                    model_name=model_name,
+                                    embedding_name=embedding_name,
+                                    dataset_name=dataset_name,
+                                    preprocessing_name=preprocessing_name,
+                                    embedding_object=embedder
+                                )
 
                         study.optimize(
                             objective,
@@ -392,25 +498,44 @@ def main(cfg: DictConfig):
                             embedding_type=embedding_name,
                             **final_model_params
                         )
-                        final_model.embedder = copy.deepcopy(embedder)
 
-                        # Train
-                        t_train = datetime.now()
-                        final_model.train_on_vectors(X_train_vec, y_train)
-                        train_time = (datetime.now() - t_train).total_seconds()
+                        # Train & evaluate final model ──
+                        if is_transformer:
+                            # Transformer: train and evaluate on raw text
+                            t_train = datetime.now()
+                            final_model.train(X_train_preprocessed, y_train)
+                            train_time = (datetime.now() - t_train).total_seconds()
 
-                        # Evaluate
-                        t_infer = datetime.now()
-                        metrics = final_model.evaluate_on_vectors(X_test_vec, y_test)
-                        inference_time = (datetime.now() - t_infer).total_seconds()
+                            t_infer = datetime.now()
+                            metrics = final_model.evaluate(X_test_preprocessed, y_test)
+                            inference_time = (datetime.now() - t_infer).total_seconds()
 
-                        # Save model
-                        final_model.save()
+                            # Save model
+                            final_model.save()
 
-                        # Get predictions
-                        y_pred, y_probs = get_predictions_and_probs(
-                            final_model, X_test_vec
-                        )
+                            # Get predictions
+                            y_pred, y_probs = get_predictions_and_probs_transformer(
+                                final_model, X_test_preprocessed
+                            )
+                        else:
+                            # Classic ML: train and evaluate on vectors
+                            final_model.embedder = copy.deepcopy(embedder)
+
+                            t_train = datetime.now()
+                            final_model.train_on_vectors(X_train_vec, y_train)
+                            train_time = (datetime.now() - t_train).total_seconds()
+
+                            t_infer = datetime.now()
+                            metrics = final_model.evaluate_on_vectors(X_test_vec, y_test)
+                            inference_time = (datetime.now() - t_infer).total_seconds()
+
+                            # Save model
+                            final_model.save()
+
+                            # Get predictions
+                            y_pred, y_probs = get_predictions_and_probs(
+                                final_model, X_test_vec
+                            )
 
                         # Log with hybrid tracking manager (CSV + MLflow)
                         tracking_mgr.log_experiment(

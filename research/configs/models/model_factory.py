@@ -1,7 +1,7 @@
 from typing import List
 from .base_model import BaseModel
 from research.configs.models import SVMModel, LogisticRegressionModel, NaiveBayesModel, MultinomialNaiveBayesModel, \
-    KNNModel, RandomForestModel, DecisionTreeModel, XGBoostModel
+    KNNModel, RandomForestModel, DecisionTreeModel, XGBoostModel, BertModel, RobertaModel
 
 
 class ModelFactory:
@@ -16,7 +16,12 @@ class ModelFactory:
         'rf': RandomForestModel,
         'dt': DecisionTreeModel,
         'xgb': XGBoostModel,
+        'bert': BertModel,
+        'roberta': RobertaModel,
     }
+
+    # Models whose training / evaluation operates on raw text, not pre-computed vectors
+    TRANSFORMER_MODELS = {'bert', 'roberta'}
 
     # Compatibility map: Model Type -> List of allowed embeddings types
     COMPATIBILITY_MAP = {
@@ -25,18 +30,16 @@ class ModelFactory:
         'lr': ['tfidf', 'word2vec', 'glove'],
         'nb': ['word2vec', 'glove'],
         'mnb': ['tfidf', 'bow'],
-
         'knn': ['word2vec', 'glove', 'bow'],
         'rf': ['tfidf', 'word2vec', 'glove', 'bow'],
         'dt': ['tfidf', 'word2vec', 'glove', 'bow'],
-
         'xgb': ['tfidf', 'bow'],
-
+        
         # DL Models
-        'lstm': ['word2vec', 'glove', 'fasttext'],
+        #'lstm': ['word2vec', 'glove'],
 
         # Transformer Models (embeddings are inherent to the pre-trained models name)
-        'bert': ['bert-base-uncased', 'bert-large-uncased'],
+        'bert': ['bert-base-uncased'],
         'roberta': ['roberta-base']
     }
 
@@ -93,4 +96,9 @@ class ModelFactory:
     def get_all_preprocessing_modes() -> List[str]:
         """Returns a sorted list of unique preprocessing modes used across all models."""
         return sorted(set(ModelFactory.PREPROCESSING_MAP.values()))
+
+    @staticmethod
+    def is_transformer_model(model_type: str) -> bool:
+        """Check if a model type is a transformer that operates on raw text."""
+        return model_type in ModelFactory.TRANSFORMER_MODELS
 

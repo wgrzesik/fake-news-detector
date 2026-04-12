@@ -6,3 +6,5 @@ from .knn import KNNModel
 from .rf import RandomForestModel
 from .dt import DecisionTreeModel
 from .xgb import XGBoostModel
+from .bert import BertModel
+from .roberta import RobertaModel
