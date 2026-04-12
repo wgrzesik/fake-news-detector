@@ -16,35 +16,67 @@ class NewsSource:
     def __init__(self, name: str, url: str):
         self.name = name
         self.url = url
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                          'Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Connection': 'keep-alive',
-        }
+        self.headers = dict(self._BROWSER_HEADERS)
 
-    @staticmethod
-    def _fetch_full_text(url: str, timeout: int = 15) -> str:
-        """Follow article URL and extract the full body text using newspaper3k."""
+    _BROWSER_HEADERS = {
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/120.0.0.0 Safari/537.36'
+        ),
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Cache-Control': 'max-age=0',
+    }
+
+    @classmethod
+    def _fetch_full_text(cls, url: str, timeout: int = 15) -> str:
+        """Follow article URL and extract the full body text using newspaper3k.
+
+        First attempts a download via newspaper3k with a browser-like config.
+        If that fails (e.g. 403), falls back to fetching the HTML manually
+        with a full set of browser headers and feeding it to newspaper3k
+        for parsing only.
+        """
+        config = NewspaperConfig()
+        config.browser_user_agent = cls._BROWSER_HEADERS['User-Agent']
+        config.request_timeout = timeout
+        config.fetch_images = False
+
+
         try:
-            config = NewspaperConfig()
-            config.browser_user_agent = (
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                'AppleWebKit/537.36 (KHTML, like Gecko) '
-                'Chrome/120.0.0.0 Safari/537.36'
-            )
-            config.request_timeout = timeout
-            config.fetch_images = False
-
             article = Article(url, config=config)
             article.download()
             article.parse()
             text = (article.text or "").strip()
             if len(text) > 100:
                 return text
-        except (ArticleException, Exception) as e:
-            print(f"  Could not fetch full text from {url}: {e}")
+        except (ArticleException, Exception):
+            pass  # fall through to manual fetch
+
+        try:
+            session = requests.Session()
+            resp = session.get(url, headers=cls._BROWSER_HEADERS,
+                               timeout=timeout, allow_redirects=True)
+            resp.raise_for_status()
+
+            article = Article(url, config=config)
+            article.set_html(resp.text)
+            article.parse()
+            text = (article.text or "").strip()
+            if len(text) > 100:
+                return text
+        except Exception as e:
+            print(f"Could not fetch full text from {url}: {e}")
+
         return ""
 
     def fetch(self, num_articles: int = 10, fetch_full_text: bool = False,
