@@ -22,3 +22,4 @@ torch>=2.0.0
 transformers>=4.30.0
 accelerate>=0.20.0
 newspaper3k==0.2.8
+lxml_html_clean

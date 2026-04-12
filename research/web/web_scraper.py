@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-from newspaper import Article, ArticleException
+from newspaper import Article, ArticleException, Config as NewspaperConfig
 
 
 class NewsSource:
@@ -28,7 +28,16 @@ class NewsSource:
     def _fetch_full_text(url: str, timeout: int = 15) -> str:
         """Follow article URL and extract the full body text using newspaper3k."""
         try:
-            article = Article(url)
+            config = NewspaperConfig()
+            config.browser_user_agent = (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/120.0.0.0 Safari/537.36'
+            )
+            config.request_timeout = timeout
+            config.fetch_images = False
+
+            article = Article(url, config=config)
             article.download()
             article.parse()
             text = (article.text or "").strip()
