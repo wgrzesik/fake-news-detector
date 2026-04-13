@@ -1,3 +1,2 @@
-from .web_scraper import WebNewsCollector, NewsSource, RealNewsSource, FakeNewsSource, create_simulated_web_data
+from .web_scraper import WebNewsCollector, NewsSource, RealNewsSource, FakeNewsSource
 from .evaluator import WebTestEvaluator
-
