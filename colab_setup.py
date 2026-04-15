@@ -28,7 +28,7 @@ OUTPUT_FILES = [
 INPUT_DIRS = {
     "research/configs/datasets/processed":   "datasets/processed",
     "research/configs/datasets/embeddings":  "datasets/embeddings",
-    "research/configs/datasets/web_scraped_data": "datasets/web_scraped_data",
+    "research/configs/web_scraped_data": "datasets/web_scraped_data",
 }
 
 
