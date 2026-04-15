@@ -75,14 +75,18 @@ class WebTestEvaluator:
               f"(preprocessing: {preprocessing_name})")
 
         try:
-            # Preprocess (cached per mode)
-            X_web_proc = self._preprocess_texts(X_web, preprocessing_name)
+            # Transformers operate on raw text (their own tokenizer handles everything)
+            is_transformer = getattr(model, "is_transformer", False)
 
-            # Embed using model's embedder
-            X_web_vec = model.embedder.transform(X_web_proc)
-
-            # Evaluate
-            metrics = model.evaluate_on_vectors(X_web_vec, y_web)
+            if is_transformer:
+                # Transformers do their own preprocessing internally
+                X_web_proc = self._preprocess_texts(X_web, preprocessing_name)
+                metrics = model.evaluate(X_web_proc, y_web)
+            else:
+                # ML models: preprocess → embed → evaluate
+                X_web_proc = self._preprocess_texts(X_web, preprocessing_name)
+                X_web_vec = model.embedder.transform(X_web_proc)
+                metrics = model.evaluate_on_vectors(X_web_vec, y_web)
 
             # Create experiment key
             experiment_key = f"{dataset_name}_{model_name}_{embedding_name}"

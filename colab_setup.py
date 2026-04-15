@@ -45,17 +45,46 @@ def _force_symlink(target: str, link: str) -> None:
     os.symlink(target, link)
 
 
+def _discover_web_scraped_data(drive: Path) -> None:
+    """Copy web_scraped_data CSVs from the INPUT location to the OUTPUT location.
+
+    Users upload CSVs to ``<drive>/datasets/web_scraped_data/`` (INPUT_DIRS).
+    ``evaluate_web.py`` reads from ``<drive>/research/configs/web_scraped_data/``
+    (OUTPUT_DIRS).  This step bridges the two by copying any CSVs across.
+    """
+    source_dir = drive / "datasets" / "web_scraped_data"
+    target_dir = drive / "research" / "configs" / "web_scraped_data"
+
+    if not source_dir.is_dir() or not any(source_dir.glob("*.csv")):
+        print(f"No web-scraped CSV files found at: {source_dir}")
+        print(f"Upload web_scraped_news.csv (and optionally web_scraped_news_full.csv) to:")
+        print(f"{source_dir}")
+        return
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+    csvs = sorted(source_dir.glob("*.csv"))
+    print(f"Copying web data from {source_dir} → {target_dir}")
+    for csv_path in csvs:
+        dest = target_dir / csv_path.name
+        shutil.copy2(str(csv_path), str(dest))
+        try:
+            row_count = len(pd.read_csv(dest))
+            print(f"{csv_path.name}  ({row_count} rows)")
+        except Exception:
+            print(f"{csv_path.name}  (copied, could not preview)")
+
+
 def setup(project_root: str, drive_root: str) -> None:
     project = Path(project_root).resolve()
     drive   = Path(drive_root).resolve()
 
     print(f"\n{'='*60}")
     print(f"Colab Setup")
-    print(f"Project : {project}")
-    print(f"Drive   : {drive}")
+    print(f"Project: {project}")
+    print(f"Drive: {drive}")
     print(f"{'='*60}\n")
 
-    print("[1/4] Linking OUTPUT directories (project -> Drive) …")
+    print("[1/5] Linking OUTPUT directories (project -> Drive) …")
     for name in OUTPUT_DIRS:
         drive_path   = str(drive / name)
         project_path = str(project / name)
@@ -63,7 +92,7 @@ def setup(project_root: str, drive_root: str) -> None:
         _force_symlink(drive_path, project_path)
         print(f"{name} -> {drive_path}")
 
-    print("\n[2/4] Linking OUTPUT files (project -> Drive) …")
+    print("\n[2/5] Linking OUTPUT files (project -> Drive) …")
     for name in OUTPUT_FILES:
         drive_path   = str(drive / name)
         project_path = str(project / name)
@@ -72,7 +101,7 @@ def setup(project_root: str, drive_root: str) -> None:
         _force_symlink(drive_path, project_path)
         print(f"{name} -> {drive_path}")
 
-    print("\n[3/4] Linking INPUT data (Drive -> project) …")
+    print("\n[3/5] Linking INPUT data (Drive -> project) …")
     for project_rel, drive_rel in INPUT_DIRS.items():
         drive_path   = str(drive / drive_rel)
         project_path = str(project / project_rel)
@@ -84,7 +113,10 @@ def setup(project_root: str, drive_root: str) -> None:
         _force_symlink(drive_path, project_path)
         print(f"{project_rel} <- {drive_path}")
 
-    print(f"\n[4/4] Checking resume state (checkpoints & completed experiments) …")
+    print(f"\n[4/5] Discovering web-scraped data …")
+    _discover_web_scraped_data(drive)
+
+    print(f"\n[5/5] Checking resume state (checkpoints & completed experiments) …")
     _print_resume_status(drive)
 
     print(f"\n{'='*60}")
