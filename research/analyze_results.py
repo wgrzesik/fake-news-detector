@@ -10,13 +10,16 @@ import seaborn as sns
 
 BASE_DIR = Path(__file__).resolve().parent.parent / "experiments"
 TRAINING_CSV = BASE_DIR / "metrics" / "training_results.csv"
-WEB_CSV = BASE_DIR / "web_test_results" / "results.csv"
+WEB_RESULTS_DIR = BASE_DIR / "web_test_results"
 RESULTS_DIR = BASE_DIR / "results"
+
+# The three web text-type result files produced by evaluate_web.py
+TEXT_TYPES = ["title", "text", "short_text"]
 
 # Metric columns used in analysis
 METRIC_COLS = ["accuracy", "precision", "recall", "f1_score"]
 
-# Key that uniquely identifies a model-experiment
+# Key that uniquely identifies a model-experiment (within a single text_type)
 MERGE_KEY = ["model", "embedding", "dataset"]
 
 
@@ -492,45 +495,146 @@ def run_analysis_pipeline(
     return merged
 
 
-def main() -> None:
-    """Entry point – orchestrates the full analysis pipeline."""
-    print("[1/4] Loading data...")
-    df_train = load_data(TRAINING_CSV)
-    df_web = load_data(WEB_CSV)
-    print(f"  Training results: {len(df_train)} models")
-    print(f"  Web results:      {len(df_web)} models")
+def plot_cross_text_type_comparison(
+    web_dfs: dict[str, pd.DataFrame],
+    output_dir: Path,
+) -> None:
+    """Bar chart comparing average F1 across text types, grouped by model."""
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Per-dataset analysis
-    datasets = sorted(
-        set(df_train["dataset"].dropna().unique())
-        | set(df_web["dataset"].dropna().unique())
+    rows = []
+    for text_type, df in web_dfs.items():
+        for _, r in df.iterrows():
+            rows.append({
+                "model": r["model"],
+                "embedding": r["embedding"],
+                "dataset": r["dataset"],
+                "text_type": text_type,
+                "f1_score": r["f1_score"],
+                "accuracy": r["accuracy"],
+            })
+
+    if not rows:
+        return
+
+    cdf = pd.DataFrame(rows)
+
+    # Grouped bar: text_type on x, bars = models, y = mean f1
+    fig, ax = plt.subplots(figsize=(max(8, len(cdf["text_type"].unique()) * 4), 6))
+
+    pivot = cdf.pivot_table(
+        index="text_type", columns="model", values="f1_score", aggfunc="mean"
     )
 
-    print(f"\n[2/4] Per-dataset analysis ({', '.join(datasets)})...")
-    for ds in datasets:
-        ds_label = ds.lower()
-        ds_dir = RESULTS_DIR / ds_label
-        print(f"\n  -- {ds.upper()} --")
+    pivot.plot(kind="bar", ax=ax, edgecolor="white")
+    ax.set_ylabel("Mean F1 Score")
+    ax.set_title("Cross-Text-Type Comparison (mean F1 per model)")
+    ax.set_ylim(0, 1.15)
+    ax.legend(title="Model", bbox_to_anchor=(1.05, 1), loc="upper left")
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
 
-        dt = df_train[df_train["dataset"] == ds].copy()
-        dw = df_web[df_web["dataset"] == ds].copy()
+    path = output_dir / "cross_text_type_comparison.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
 
-        result = run_analysis_pipeline(dt, dw, ds_dir, subset_label=ds_label)
-        if result is None:
-            print(f"    ! No common models to compare for dataset '{ds}'.")
+    # Save CSV summary
+    summary = cdf.groupby("text_type").agg({
+        "f1_score": ["count", "mean", "max", "min", "std"],
+        "accuracy": "mean",
+    }).round(4)
+    summary.to_csv(output_dir / "cross_text_type_summary.csv")
+
+    # Save TXT
+    txt_path = output_dir / "cross_text_type_summary.txt"
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write("=" * 70 + "\n")
+        f.write(" CROSS-TEXT-TYPE COMPARISON\n")
+        f.write("=" * 70 + "\n\n")
+        f.write(str(summary))
+        f.write("\n\n")
+        f.write("Per-model mean F1 by text type:\n")
+        f.write(pivot.round(4).to_string())
+        f.write("\n")
+
+
+def main() -> None:
+    """Entry point – orchestrates the full analysis pipeline."""
+
+    # ── 1. Load training results ──────────────────────────────────────────
+    print("[1/5] Loading training data...")
+    df_train = load_data(TRAINING_CSV)
+    print(f"  Training results: {len(df_train)} models")
+
+    # ── 2. Load per-text-type web results ────────────────────────────────
+    print(f"\n[2/5] Loading web results for text types: {TEXT_TYPES}...")
+    web_dfs: dict[str, pd.DataFrame] = {}
+    for text_type in TEXT_TYPES:
+        csv_path = WEB_RESULTS_DIR / f"results_{text_type}.csv"
+        if csv_path.exists():
+            web_dfs[text_type] = load_data(csv_path)
+            print(f"  {text_type:12s}: {len(web_dfs[text_type])} models")
         else:
-            print(f"    OK Results saved to: {ds_dir}")
+            print(f"  {text_type:12s}: NOT FOUND ({csv_path})")
 
-    # Global analysis (all)
-    print("\n[3/4] Global analysis (all)...")
-    all_dir = RESULTS_DIR / "all"
-    result_all = run_analysis_pipeline(df_train, df_web, all_dir, subset_label="all")
-    if result_all is None:
-        print("  ! No common models for global comparison.")
+    if not web_dfs:
+        print("\n  [Warning] No web result files found. Only training analysis will run.")
+
+    # ── 3. Per text-type analysis ────────────────────────────────────────
+    step = 3
+    for text_type, df_web in web_dfs.items():
+        print(f"\n[{step}/5] Analysis for text_type='{text_type}'...")
+
+        datasets = sorted(
+            set(df_train["dataset"].dropna().unique())
+            | set(df_web["dataset"].dropna().unique())
+        )
+
+        # Per-dataset
+        for ds in datasets:
+            ds_label = ds.lower()
+            ds_dir = RESULTS_DIR / text_type / ds_label
+            print(f"\n  -- {ds.upper()} / {text_type} --")
+
+            dt = df_train[df_train["dataset"] == ds].copy()
+            dw = df_web[df_web["dataset"] == ds].copy()
+
+            result = run_analysis_pipeline(dt, dw, ds_dir, subset_label=f"{ds_label}_{text_type}")
+            if result is None:
+                print(f"    ! No common models to compare for dataset '{ds}'.")
+            else:
+                print(f"    OK  Results saved to: {ds_dir}")
+
+        # Global (all datasets combined)
+        all_dir = RESULTS_DIR / text_type / "all"
+        result_all = run_analysis_pipeline(
+            df_train, df_web, all_dir, subset_label=f"all_{text_type}"
+        )
+        if result_all is None:
+            print(f"  ! No common models for global comparison ({text_type}).")
+        else:
+            print(f"  OK  Global results saved to: {all_dir}")
+
+    # ── 4. Training-only analysis (no web data needed) ───────────────────
+    print(f"\n[4/5] Training-only ranking...")
+    train_dir = RESULTS_DIR / "training"
+    train_dir.mkdir(parents=True, exist_ok=True)
+    if not df_train.empty:
+        compare_within(df_train, label="training", output_dir=train_dir)
+        print(f"  OK  Saved to: {train_dir}")
+
+    # ── 5. Cross-text-type comparison ────────────────────────────────────
+    if len(web_dfs) > 1:
+        print(f"\n[5/5] Cross-text-type comparison...")
+        cross_dir = RESULTS_DIR / "cross_text_type"
+        plot_cross_text_type_comparison(web_dfs, cross_dir)
+        print(f"  OK  Saved to: {cross_dir}")
     else:
-        print(f"  OK Results saved to: {all_dir}")
+        print(f"\n[5/5] Skipping cross-text-type comparison (need ≥ 2 text types).")
 
-    print(f"\n[4/4] Analysis complete. All results in: {RESULTS_DIR}")
+    print(f"\n{'=' * 60}")
+    print(f"Analysis complete. All results in: {RESULTS_DIR}")
+    print(f"{'=' * 60}")
 
 
 if __name__ == "__main__":

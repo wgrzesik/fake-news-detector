@@ -125,7 +125,8 @@ class WebTestRunner:
             models: Optional[List[str]] = None,
             embeddings: Optional[List[str]] = None,
             preprocessing_name: str = "classic",
-            num_models: Optional[int] = None
+            num_models: Optional[int] = None,
+            text_type: str = "text",
     ):
         """Run tests on web data with filtering.
         preprocessing_name is used only as a fallback – the actual mode
@@ -143,7 +144,7 @@ class WebTestRunner:
             found_models = found_models[:num_models]
 
         print(f"\n{'=' * 100}")
-        print(f"[Web Testing] Found {len(found_models)} models to test")
+        print(f"[Web Testing] Found {len(found_models)} models to test (text_type: {text_type})")
         print(f"{'=' * 100}")
 
         print("\nModels to test:")
@@ -169,7 +170,7 @@ class WebTestRunner:
         for idx, model_info in enumerate(found_models, 1):
             exp_key = f"{model_info['model']}_{model_info['embedding']}"
             print(
-                f"\n[{idx}/{len(found_models)}] Testing {exp_key}..."
+                f"\n[{idx}/{len(found_models)}] Testing {exp_key} ({text_type})..."
             )
 
             try:
@@ -189,6 +190,7 @@ class WebTestRunner:
                     dataset_name=self.dataset_name,
                     model_name=model_info['model'],
                     embedding_name=model_info['embedding'],
+                    text_type=text_type,
                 )
 
                 if result:
@@ -287,7 +289,7 @@ def _run_evaluation_for_web_variant(
         cfg, datasets, models_list, embeddings_list, preprocessing_name,
         results_dir, web_data_path, text_type: str
 ):
-    """Run evaluation on a single web-data variant (short or full_article).
+    """Run evaluation on a single web-data variant (title / text / short_text).
 
     Returns a list of result DataFrames (one per dataset).
     """
@@ -322,16 +324,11 @@ def _run_evaluation_for_web_variant(
             models=models_list,
             embeddings=embeddings_list,
             preprocessing_name=preprocessing_name,
-            num_models=None
+            num_models=None,
+            text_type=text_type,
         )
 
         if not web_results.empty:
-            # Tag every result with the text type so short vs full can be distinguished
-            web_results['text_type'] = text_type
-            # Make experiment_key unique per text_type
-            web_results['experiment_key'] = (
-                web_results['experiment_key'] + f"_{text_type}"
-            )
             all_results.append(web_results)
 
             # Print dataset summary
@@ -351,8 +348,8 @@ def _run_evaluation_for_web_variant(
     return all_results
 
 
-def _save_and_print_summary(all_results, results_dir):
-    """Merge, upsert, save combined results and print summary."""
+def _save_and_print_summary(all_results, results_dir, text_type: str = "text"):
+    """Merge, upsert, save combined results for a single text_type and print summary."""
     if not all_results:
         return
 
@@ -369,7 +366,8 @@ def _save_and_print_summary(all_results, results_dir):
     combined_results = combined_results[[c for c in columns if c in combined_results.columns]]
 
     # Upsert: overwrite existing rows for the same experiment_key, append new ones
-    output_path = Path(results_dir) / "results.csv"
+    filename = f"results_{text_type}.csv"
+    output_path = Path(results_dir) / filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     if output_path.exists():
@@ -386,14 +384,14 @@ def _save_and_print_summary(all_results, results_dir):
 
     # Print overall summary
     print("\n" + "=" * 100)
-    print("OVERALL RESULTS SUMMARY")
+    print(f"RESULTS SUMMARY — text_type: {text_type}")
     print("=" * 100)
     print(f"\nTotal models tested: {len(combined_results)}")
     print(f"Average F1 Score: {combined_results['f1_score'].mean():.4f}")
     print(f"Best F1 Score: {combined_results['f1_score'].max():.4f}")
     print(f"Worst F1 Score: {combined_results['f1_score'].min():.4f}\n")
 
-    print("Top 10 Models (across all datasets):")
+    print("Top 10 Models:")
     print(combined_results.nlargest(10, 'f1_score')[[
         'dataset', 'model', 'embedding', 'text_type', 'f1_score', 'accuracy'
     ]].to_string(index=False))
@@ -413,16 +411,6 @@ def _save_and_print_summary(all_results, results_dir):
     }).round(4)
     print(by_dataset)
 
-    # Summary by text_type (short vs full_article)
-    if 'text_type' in combined_results.columns:
-        print("\n" + "-" * 100)
-        print("SUMMARY BY TEXT TYPE (short vs full_article)")
-        print("-" * 100)
-        by_text_type = combined_results.groupby('text_type').agg({
-            'f1_score': ['count', 'mean', 'max', 'min', 'std'],
-            'accuracy': 'mean'
-        }).round(4)
-        print(by_text_type)
 
 
 def main_with_hydra(cfg: DictConfig):
@@ -436,12 +424,12 @@ def main_with_hydra(cfg: DictConfig):
     models_list = cfg.get('models_to_optimize', [cfg.models.name])
     embeddings_list = cfg.get('embeddings_to_use', [cfg.embeddings.name])
     preprocessing_name = cfg.get('preprocessing', {}).get('name', 'classic')
-    results_dir = cfg.get('results_dir', './experiments/web_test_results')
+    results_dir = cfg.get('web_testing', {}).get('results_dir', './experiments/web_test_results')
 
-    full_article_filename = cfg.web_scraping.get(
-        'full_article_filename', 'web_scraped_news_full.csv'
+    processed_dir = cfg.web_scraping.get(
+        'processed_dir', 'research/configs/web_scraped_data/processed'
     )
-    scrape_full_articles = cfg.web_scraping.get('scrape_full_articles', False)
+    text_types = list(cfg.web_scraping.get('text_types', ['title', 'text', 'short_text']))
 
     print(f"\nConfiguration loaded:")
     print(f"  Datasets: {datasets}")
@@ -449,39 +437,30 @@ def main_with_hydra(cfg: DictConfig):
     print(f"  Embeddings: {embeddings_list}")
     print(f"  Preprocessing: {preprocessing_name}")
     print(f"  Results dir: {results_dir}")
-    print(f"  Full-article evaluation: {scrape_full_articles}\n")
+    print(f"  Processed dir: {processed_dir}")
+    print(f"  Text types: {text_types}\n")
 
-    all_results = []
+    # Evaluate each text type separately
+    for text_type in text_types:
+        web_data_path = f"{processed_dir}/web_{text_type}.csv"
 
-    # Evaluate on SHORT text (RSS descriptions)
-    short_path = cfg.web_scraping.output_dir + "/web_scraped_news.csv"
-    print("\n" + "#" * 100)
-    print("  PHASE 1: SHORT TEXT (RSS descriptions)")
-    print("#" * 100)
-    short_results = _run_evaluation_for_web_variant(
-        cfg, datasets, models_list, embeddings_list,
-        preprocessing_name, results_dir, short_path,
-        text_type="short"
-    )
-    all_results.extend(short_results)
-
-    # Evaluate on FULL ARTICLES (if available)
-    if scrape_full_articles:
-        full_path = cfg.web_scraping.output_dir + "/" + full_article_filename
         print("\n" + "#" * 100)
-        print("  PHASE 2: FULL ARTICLES")
+        print(f"  EVALUATING TEXT TYPE: {text_type.upper()}")
+        print(f"  Source: {web_data_path}")
         print("#" * 100)
-        full_results = _run_evaluation_for_web_variant(
+
+        variant_results = _run_evaluation_for_web_variant(
             cfg, datasets, models_list, embeddings_list,
-            preprocessing_name, results_dir, full_path,
-            text_type="full_article"
+            preprocessing_name, results_dir, web_data_path,
+            text_type=text_type,
         )
-        all_results.extend(full_results)
 
-    # Save combined results
-    _save_and_print_summary(all_results, results_dir)
+        # Save results for this text type to its own CSV
+        _save_and_print_summary(variant_results, results_dir, text_type=text_type)
 
-    print("\n" + "=" * 100 + "\n")
+    print("\n" + "=" * 100)
+    print("ALL TEXT TYPES EVALUATED")
+    print("=" * 100 + "\n")
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="config")

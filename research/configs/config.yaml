@@ -230,8 +230,13 @@ web_scraping:
   num_real_samples: 5000
   num_fake_samples: 5000
   output_dir: "research/configs/web_scraped_data"
+  processed_dir: "research/configs/web_scraped_data/processed"
   scrape_full_articles: true  # Also fetch full article body from each URL
-  full_article_filename: "web_scraped_news_full.csv"
+  filename: "web_scraped_news.csv"
+  text_types:
+    - title
+    - text
+    - short_text
 
 # Web testing
 web_testing:

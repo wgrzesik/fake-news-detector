@@ -34,9 +34,9 @@ class WebTestEvaluator:
             self._preprocessors[mode] = TextPreprocessor(mode=mode)
         return self._preprocessors[mode]
 
-    def _preprocess_texts(self, texts: List[str], mode: str) -> List[str]:
-        """Preprocess texts with caching per mode."""
-        cache_key = mode
+    def _preprocess_texts(self, texts: List[str], mode: str, text_type: str = "") -> List[str]:
+        """Preprocess texts with caching per (text_type, mode)."""
+        cache_key = f"{text_type}_{mode}" if text_type else mode
         if cache_key not in self._preprocessing_cache:
             preprocessor = self._get_preprocessor(mode)
             self._preprocessing_cache[cache_key] = preprocessor.transform(texts)
@@ -55,6 +55,7 @@ class WebTestEvaluator:
         model_name: str,
         embedding_name: str,
         preprocessing_name: str = None,
+        text_type: str = "text",
     ):
         """
         Evaluate a trained model on web-scraped data.
@@ -72,7 +73,7 @@ class WebTestEvaluator:
         preprocessing_name = resolved_preprocessing
 
         print(f"\n[Web Testing] {model_name} + {embedding_name} on {dataset_name} "
-              f"(preprocessing: {preprocessing_name})")
+              f"(preprocessing: {preprocessing_name}, text_type: {text_type})")
 
         try:
             # Transformers operate on raw text (their own tokenizer handles everything)
@@ -80,16 +81,16 @@ class WebTestEvaluator:
 
             if is_transformer:
                 # Transformers do their own preprocessing internally
-                X_web_proc = self._preprocess_texts(X_web, preprocessing_name)
+                X_web_proc = self._preprocess_texts(X_web, preprocessing_name, text_type)
                 metrics = model.evaluate(X_web_proc, y_web)
             else:
                 # ML models: preprocess → embed → evaluate
-                X_web_proc = self._preprocess_texts(X_web, preprocessing_name)
+                X_web_proc = self._preprocess_texts(X_web, preprocessing_name, text_type)
                 X_web_vec = model.embedder.transform(X_web_proc)
                 metrics = model.evaluate_on_vectors(X_web_vec, y_web)
 
-            # Create experiment key
-            experiment_key = f"{dataset_name}_{model_name}_{embedding_name}"
+            # Create experiment key (unique per dataset + model + embedding + text_type)
+            experiment_key = f"{dataset_name}_{model_name}_{embedding_name}_{text_type}"
 
             # Get confusion matrix if available
             confusion_matrix = None
@@ -103,6 +104,7 @@ class WebTestEvaluator:
                 'embedding': embedding_name,
                 'preprocessing': preprocessing_name,
                 'test_type': 'web_scraped',
+                'text_type': text_type,
                 'num_samples': len(y_web),
                 'accuracy': round(metrics['accuracy'], 4),
                 'precision': round(metrics['precision'], 4),

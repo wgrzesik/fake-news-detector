@@ -50,18 +50,21 @@ def _discover_web_scraped_data(drive: Path) -> None:
 
     Users upload CSVs to ``<drive>/datasets/web_scraped_data/`` (INPUT_DIRS).
     ``evaluate_web.py`` reads from ``<drive>/research/configs/web_scraped_data/``
-    (OUTPUT_DIRS).  This step bridges the two by copying any CSVs across.
+    (OUTPUT_DIRS).  This step bridges the two by copying any CSVs across,
+    including the ``processed/`` subdirectory.
     """
     source_dir = drive / "datasets" / "web_scraped_data"
     target_dir = drive / "research" / "configs" / "web_scraped_data"
 
     if not source_dir.is_dir() or not any(source_dir.glob("*.csv")):
         print(f"No web-scraped CSV files found at: {source_dir}")
-        print(f"Upload web_scraped_news.csv (and optionally web_scraped_news_full.csv) to:")
+        print(f"Upload web_scraped_news.csv to:")
         print(f"{source_dir}")
         return
 
     target_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy root-level CSVs
     csvs = sorted(source_dir.glob("*.csv"))
     print(f"Copying web data from {source_dir} → {target_dir}")
     for csv_path in csvs:
@@ -69,9 +72,25 @@ def _discover_web_scraped_data(drive: Path) -> None:
         shutil.copy2(str(csv_path), str(dest))
         try:
             row_count = len(pd.read_csv(dest))
-            print(f"{csv_path.name}  ({row_count} rows)")
+            print(f"  {csv_path.name}  ({row_count} rows)")
         except Exception:
-            print(f"{csv_path.name}  (copied, could not preview)")
+            print(f"  {csv_path.name}  (copied, could not preview)")
+
+    # Copy processed/ subdirectory CSVs
+    processed_src = source_dir / "processed"
+    processed_dst = target_dir / "processed"
+    if processed_src.is_dir() and any(processed_src.glob("*.csv")):
+        processed_dst.mkdir(parents=True, exist_ok=True)
+        proc_csvs = sorted(processed_src.glob("*.csv"))
+        print(f"Copying processed web data from {processed_src} → {processed_dst}")
+        for csv_path in proc_csvs:
+            dest = processed_dst / csv_path.name
+            shutil.copy2(str(csv_path), str(dest))
+            try:
+                row_count = len(pd.read_csv(dest))
+                print(f"{csv_path.name}  ({row_count} rows)")
+            except Exception:
+                print(f"{csv_path.name}  (copied, could not preview)")
 
 
 def setup(project_root: str, drive_root: str) -> None:
@@ -181,6 +200,21 @@ def _print_resume_status(drive: Path) -> None:
                 print(f"{csv_path.name}  (could not read)")
     else:
         print("No web scraped data yet (run collect_web first).")
+
+    # Processed web data
+    processed_dir = web_dir / "processed" if web_dir.exists() else None
+    if processed_dir and processed_dir.exists():
+        proc_csvs = sorted(processed_dir.glob("*.csv"))
+        if proc_csvs:
+            print(f"Processed web data files: {len(proc_csvs)}")
+            for csv_path in proc_csvs:
+                try:
+                    df = pd.read_csv(csv_path)
+                    print(f"{csv_path.name}  ({len(df)} samples)")
+                except Exception:
+                    print(f"{csv_path.name}  (could not read)")
+        else:
+            print("No processed web data yet (run clean_web_data first).")
 
 
 if __name__ == "__main__":
