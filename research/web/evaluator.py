@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from typing import Dict, List
 
+import numpy as np
 import pandas as pd
 
 from research.configs.models.model_factory import ModelFactory
@@ -87,6 +88,28 @@ class WebTestEvaluator:
                 # ML models: preprocess → embed → evaluate
                 X_web_proc = self._preprocess_texts(X_web, preprocessing_name, text_type)
                 X_web_vec = model.embedder.transform(X_web_proc)
+
+                # Diagnostic: vector and prediction analysis
+                vec_norms = np.linalg.norm(X_web_vec, axis=1)
+                zero_vecs = np.sum(vec_norms == 0)
+                print(f"  [Diag] Vectors shape: {X_web_vec.shape} | "
+                      f"zero vectors: {zero_vecs}/{len(X_web_vec)} | "
+                      f"mean norm: {vec_norms.mean():.4f}")
+
+                # Apply scaler if present (same as evaluate_on_vectors)
+                X_for_pred = X_web_vec
+                if model.scaler:
+                    X_for_pred = model.scaler.transform(X_web_vec)
+                    print(f"  [Diag] Scaler applied: {model.scaler.__class__.__name__}")
+                else:
+                    print(f"  [Diag] No scaler")
+
+                y_pred = model.classifier.predict(X_for_pred)
+                unique, counts = np.unique(y_pred, return_counts=True)
+                pred_dist = dict(zip(unique.tolist(), counts.tolist()))
+                print(f"  [Diag] Prediction distribution: {pred_dist}")
+                print(f"  [Diag] First 20 predictions: {y_pred[:20].tolist()}")
+
                 metrics = model.evaluate_on_vectors(X_web_vec, y_web)
 
             # Create experiment key (unique per dataset + model + embedding + text_type)

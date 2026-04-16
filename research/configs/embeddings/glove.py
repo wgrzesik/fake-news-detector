@@ -35,14 +35,12 @@ class GloveEmbedder(BaseEmbedder):
         # Create an averaged document vector for each text
         X_vec = []
         for text in texts:
-            # Simple whitespace tokenization; replace with spaCy/NLTK if preferred
             words = str(text).lower().split()
             vecs = [self.embeddings_index[w] for w in words if w in self.embeddings_index]
-            
+
             if len(vecs) > 0:
                 X_vec.append(np.mean(vecs, axis=0))
             else:
-                # Fallback for empty strings or texts with zero known words
                 X_vec.append(np.zeros(self.embedding_dim))
-                
+
         return np.vstack(X_vec)
