@@ -87,10 +87,17 @@ class WebTestEvaluator:
             else:
                 # ML models: preprocess → embed → evaluate
                 X_web_proc = self._preprocess_texts(X_web, preprocessing_name, text_type)
+                # Ensure all texts are strings (avoid dtype=object errors in sparse matrices)
+                X_web_proc = [str(t) if not isinstance(t, str) else t for t in X_web_proc]
                 X_web_vec = model.embedder.transform(X_web_proc)
 
                 # Diagnostic: vector and prediction analysis
-                vec_norms = np.linalg.norm(X_web_vec, axis=1)
+                from scipy.sparse import issparse
+                from scipy.sparse.linalg import norm as sparse_norm
+                if issparse(X_web_vec):
+                    vec_norms = np.asarray(sparse_norm(X_web_vec, axis=1)).flatten()
+                else:
+                    vec_norms = np.linalg.norm(X_web_vec, axis=1)
                 zero_vecs = np.sum(vec_norms == 0)
                 print(f"  [Diag] Vectors shape: {X_web_vec.shape} | "
                       f"zero vectors: {zero_vecs}/{len(X_web_vec)} | "

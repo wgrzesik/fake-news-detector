@@ -300,6 +300,7 @@ def _run_evaluation_for_web_variant(
 
     web_data = pd.read_csv(web_data_path)
     web_data = web_data.dropna(subset=['text', 'label'])
+    web_data['text'] = web_data['text'].astype(str)
     print(f"Loaded {len(web_data)} valid samples for testing (text_type='{text_type}').\n")
 
     all_results = []
