@@ -3,7 +3,7 @@ from .base_embedding import BaseEmbedder
 
 
 class GloveEmbedder(BaseEmbedder):
-    def __init__(self, model_path: str = "research/data/embeddings/glove.6B.100d.txt", embedding_dim: int = 100):
+    def __init__(self, model_path: str = "research/configs/datasets/embeddings/glove.6B.100d.txt", embedding_dim: int = 100):
         """
         Initializes the GloVe embedder.
         Requires a pre-trained GloVe file (e.g., glove.6B.100d.txt).
