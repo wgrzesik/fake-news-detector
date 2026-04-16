@@ -100,7 +100,7 @@ class WebTestEvaluator:
                     vec_norms = np.linalg.norm(X_web_vec, axis=1)
                 zero_vecs = np.sum(vec_norms == 0)
                 print(f"  [Diag] Vectors shape: {X_web_vec.shape} | "
-                      f"zero vectors: {zero_vecs}/{len(X_web_vec)} | "
+                      f"zero vectors: {zero_vecs}/{X_web_vec.shape[0]} | "
                       f"mean norm: {vec_norms.mean():.4f}")
 
                 # Apply scaler if present (same as evaluate_on_vectors)
