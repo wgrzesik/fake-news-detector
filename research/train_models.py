@@ -11,6 +11,7 @@ import optuna
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 from optuna.samplers import TPESampler
+from optuna.pruners import MedianPruner
 import copy
 
 from research.configs.embeddings.embedding_factory import EmbedderFactory
@@ -224,7 +225,12 @@ def run_single_trial_transformer(
     dataset_name: str,
     preprocessing_name: str,
 ):
-    """Run a single Optuna trial for a transformer model (operates on raw text)."""
+    """Run a single Optuna trial for a transformer model (operates on raw text).
+
+    Passes the trial object to model.train() so that intermediate F1 is
+    reported after each epoch, enabling Optuna's pruner to kill bad trials
+    early.
+    """
     try:
         # Get model config and optuna search space
         model_config = OmegaConf.to_container(cfg.models.get(model_name, {}))
@@ -236,6 +242,9 @@ def run_single_trial_transformer(
         # Merge with base model params
         model_params = {**model_config, **suggested_params}
         model_params.pop('optuna', None)
+
+        # Disable checkpoints during Optuna trials (speed)
+        model_params['save_checkpoints'] = False
 
         trial_run_name = (
             f"{dataset_name}_{model_name}_{embedding_name}_{preprocessing_name}_trial{trial.number}"
@@ -256,8 +265,13 @@ def run_single_trial_transformer(
                 **model_params
             )
 
-            # Train on raw text
-            model.train(X_train_texts, y_train)
+            # Train on raw text with pruning support
+            model.train(
+                X_train_texts, y_train,
+                trial=trial,
+                X_val=X_test_texts,
+                y_val=y_test,
+            )
 
             # Evaluate on raw text
             metrics = model.evaluate(X_test_texts, y_test)
@@ -273,6 +287,8 @@ def run_single_trial_transformer(
             trial_f1 = metrics["f1_score"]
             return trial_f1
 
+    except optuna.TrialPruned:
+        raise  # re-raise so Optuna handles it
     except Exception as e:
         print(f"Trial {trial.number} FAILED: {str(e)}")
         traceback.print_exc()
@@ -460,9 +476,11 @@ def main(cfg: DictConfig):
                         print(f"[Optuna] Running {cfg.optuna.n_trials} trials...")
 
                         sampler = TPESampler(seed=cfg.seed)
+                        pruner = MedianPruner(n_startup_trials=2) if is_transformer else None
                         try:
                             study = optuna.create_study(
                                 sampler=sampler,
+                                pruner=pruner,
                                 direction='maximize'
                             )
                         except Exception as e:
@@ -473,6 +491,7 @@ def main(cfg: DictConfig):
                                   f"(results still saved via MLflow/CSV)")
                             study = optuna.create_study(
                                 sampler=sampler,
+                                pruner=pruner,
                                 direction='maximize',
                                 study_name=run_name,
                             )

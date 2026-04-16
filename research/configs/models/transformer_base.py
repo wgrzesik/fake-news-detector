@@ -8,36 +8,42 @@ import torch
 from torch.amp import GradScaler, autocast
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from torch.utils.data import DataLoader, Dataset
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, get_linear_schedule_with_warmup
+from transformers import (
+    AutoTokenizer,
+    AutoModelForSequenceClassification,
+    get_linear_schedule_with_warmup,
+    DataCollatorWithPadding,
+)
 
 from research.configs.models.base_model import BaseModel
 from research.configs.preprocessing.preprocessor import TextPreprocessor
 
 
-class TextClassificationDataset(Dataset):
-    """PyTorch Dataset for transformer text classification."""
+class PreTokenizedDataset(Dataset):
+    """PyTorch Dataset with pre-tokenized inputs (tokenization happens once, not per-batch).
 
-    def __init__(self, texts: List[str], labels: List[int], tokenizer, max_length: int = 512):
-        self.texts = texts
+    Uses dynamic padding via DataCollatorWithPadding in the DataLoader,
+    so sequences are only padded to the longest in each batch — not to max_length.
+    """
+
+    def __init__(self, texts: List[str], labels: List[int], tokenizer, max_length: int = 128):
+        # Pre-tokenize ALL texts once (no padding here — collator handles it per-batch)
+        self.encodings = tokenizer(
+            texts,
+            truncation=True,
+            padding=False,  # dynamic padding handled by DataCollatorWithPadding
+            max_length=max_length,
+        )
         self.labels = labels
-        self.tokenizer = tokenizer
-        self.max_length = max_length
 
     def __len__(self):
-        return len(self.texts)
+        return len(self.labels)
 
     def __getitem__(self, idx):
-        encoding = self.tokenizer(
-            self.texts[idx],
-            max_length=self.max_length,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt",
-        )
         return {
-            "input_ids": encoding["input_ids"].squeeze(0),
-            "attention_mask": encoding["attention_mask"].squeeze(0),
-            "label": torch.tensor(self.labels[idx], dtype=torch.long),
+            "input_ids": self.encodings["input_ids"][idx],
+            "attention_mask": self.encodings["attention_mask"][idx],
+            "labels": self.labels[idx],
         }
 
 
@@ -62,15 +68,20 @@ class TransformerBaseModel(BaseModel):
         self.learning_rate = float(kwargs.get("learning_rate", 2e-5))
         self.num_epochs = int(kwargs.get("num_epochs", 3))
         self.batch_size = int(kwargs.get("batch_size", 16))
-        self.max_length = int(kwargs.get("max_length", 512))
+        self.max_length = int(kwargs.get("max_length", 128))  # reduced from 512
         self.weight_decay = float(kwargs.get("weight_decay", 0.01))
         self.warmup_ratio = float(kwargs.get("warmup_ratio", 0.1))
         self.gradient_accumulation_steps = int(kwargs.get("gradient_accumulation_steps", 1))
         self.fp16 = bool(kwargs.get("fp16", False))
         self.save_checkpoints = bool(kwargs.get("save_checkpoints", True))
+        self.num_workers = int(kwargs.get("num_workers", 2))
 
         # Device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Enable cuDNN auto-tuner for faster convolutions on fixed-size inputs
+        if self.device.type == "cuda":
+            torch.backends.cudnn.benchmark = True
 
         # Mixed Precision – only when GPU is available
         self.use_fp16 = self.fp16 and self.device.type == "cuda"
@@ -97,6 +108,25 @@ class TransformerBaseModel(BaseModel):
             self.pretrained_model_name,
             num_labels=2,
         ).to(self.device)
+
+    def _create_dataloader(self, texts, labels, shuffle=False):
+        """Create a DataLoader with pre-tokenized dataset and dynamic padding."""
+        dataset = PreTokenizedDataset(texts, labels, self.tokenizer, self.max_length)
+        collator = DataCollatorWithPadding(tokenizer=self.tokenizer, return_tensors="pt")
+
+        # num_workers > 0 can be problematic on Windows; fall back gracefully
+        num_workers = self.num_workers
+        persistent = num_workers > 0
+
+        return DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            pin_memory=True,
+            persistent_workers=persistent,
+            collate_fn=collator,
+        )
 
     # Checkpoint management (Google Drive persistence)
 
@@ -201,28 +231,29 @@ class TransformerBaseModel(BaseModel):
             print(f"Checkpoint cleared: {ckpt_path}")
 
     # Training
-    def train(self, X_train_raw: List[str], y_train: List[int]) -> None:
+    def train(self, X_train_raw: List[str], y_train: List[int],
+              trial=None, X_val: List[str] = None, y_val: List[int] = None) -> None:
         """Fine-tune the transformer on raw text.
 
         Automatically saves a checkpoint after every epoch (to Google Drive
         when running on Colab) and resumes from the latest checkpoint if one
         exists.
+
+        Args:
+            trial: Optional Optuna trial for pruning support. When provided
+                   (together with X_val/y_val), the model reports intermediate
+                   F1 after each epoch so Optuna can prune unpromising trials.
+            X_val / y_val: Validation data for intermediate evaluation during
+                   Optuna trials.
         """
         print(f"Training {self.model_name} on {self.device} "
               f"(lr={self.learning_rate}, epochs={self.num_epochs}, "
               f"batch={self.batch_size}, max_len={self.max_length}, "
-              f"fp16={self.use_fp16}, checkpoints={self.save_checkpoints})")
+              f"fp16={self.use_fp16}, checkpoints={self.save_checkpoints}, "
+              f"num_workers={self.num_workers})")
 
-        dataset = TextClassificationDataset(
-            X_train_raw, y_train, self.tokenizer, self.max_length
-        )
-        dataloader = DataLoader(
-            dataset,
-            batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=0,
-            pin_memory=True,
-        )
+        # Pre-tokenize once (not per-batch)
+        dataloader = self._create_dataloader(X_train_raw, y_train, shuffle=True)
 
         optimizer = torch.optim.AdamW(
             self.transformer_model.parameters(),
@@ -254,7 +285,7 @@ class TransformerBaseModel(BaseModel):
             for step, batch in enumerate(dataloader):
                 input_ids = batch["input_ids"].to(self.device)
                 attention_mask = batch["attention_mask"].to(self.device)
-                labels = batch["label"].to(self.device)
+                labels = batch["labels"].to(self.device)
 
                 with autocast(device_type=self.device.type, enabled=self.use_fp16):
                     outputs = self.transformer_model(
@@ -278,6 +309,16 @@ class TransformerBaseModel(BaseModel):
             avg_loss = epoch_loss / len(dataloader)
             print(f"  Epoch {epoch + 1}/{self.num_epochs} — loss: {avg_loss:.4f}")
 
+            # Optuna pruning: report intermediate metric after each epoch
+            if trial is not None and X_val is not None and y_val is not None:
+                val_metrics = self.evaluate(X_val, y_val)
+                val_f1 = val_metrics["f1_score"]
+                print(f"  Epoch {epoch + 1}/{self.num_epochs} — val_f1: {val_f1:.4f}")
+                trial.report(val_f1, epoch)
+                if trial.should_prune():
+                    print(f"  Trial pruned at epoch {epoch + 1}")
+                    raise __import__("optuna").TrialPruned()
+
             # Save checkpoint after each epoch
             if self.save_checkpoints:
                 self._save_checkpoint(epoch, optimizer, scheduler, self.grad_scaler, avg_loss)
@@ -288,7 +329,6 @@ class TransformerBaseModel(BaseModel):
 
     def train_on_vectors(self, X_vec, y_train: List[int]) -> None:
         """Transformer models don't use pre-computed vectors — redirect to train()."""
-        # X_vec is actually raw text when called from the transformer branch
         self.train(X_vec, y_train)
 
     def evaluate(self, X_test_raw: List[str], y_test: List[int]) -> Dict[str, float]:
@@ -308,19 +348,9 @@ class TransformerBaseModel(BaseModel):
         """Redirect to text-based evaluate()."""
         return self.evaluate(X_vec, y_test)
 
-
     def _predict_batch(self, texts: List[str]):
         """Run inference on a list of texts. Returns (predictions, probabilities)."""
-        dataset = TextClassificationDataset(
-            texts, [0] * len(texts), self.tokenizer, self.max_length
-        )
-        dataloader = DataLoader(
-            dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=0,
-            pin_memory=True,
-        )
+        dataloader = self._create_dataloader(texts, [0] * len(texts), shuffle=False)
 
         self.transformer_model.eval()
         all_preds = []
@@ -336,7 +366,7 @@ class TransformerBaseModel(BaseModel):
                         input_ids=input_ids,
                         attention_mask=attention_mask,
                     )
-                logits = outputs.logits.float()  # ensure float32 for softmax
+                logits = outputs.logits.float()
                 probs = torch.softmax(logits, dim=-1)
                 preds = torch.argmax(logits, dim=-1)
 

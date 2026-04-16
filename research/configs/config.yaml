@@ -141,12 +141,13 @@ models:
     learning_rate: 2.0e-5
     num_epochs: 3
     batch_size: 16
-    max_length: 512
+    max_length: 128
     weight_decay: 0.01
     warmup_ratio: 0.1
     gradient_accumulation_steps: 1
     fp16: true
     save_checkpoints: true
+    num_workers: 2
     optuna:
       learning_rate:
         type: float
@@ -160,6 +161,9 @@ models:
       batch_size:
         type: categorical
         choices: [8, 16, 32]
+      max_length:
+        type: categorical
+        choices: [128, 256]
       weight_decay:
         type: float
         low: 0.0
@@ -173,12 +177,13 @@ models:
     learning_rate: 2.0e-5
     num_epochs: 3
     batch_size: 16
-    max_length: 512
+    max_length: 128
     weight_decay: 0.01
     warmup_ratio: 0.1
     gradient_accumulation_steps: 1
     fp16: true
     save_checkpoints: true
+    num_workers: 2
     optuna:
       learning_rate:
         type: float
@@ -192,6 +197,9 @@ models:
       batch_size:
         type: categorical
         choices: [8, 16, 32]
+      max_length:
+        type: categorical
+        choices: [128, 256]
       weight_decay:
         type: float
         low: 0.0
