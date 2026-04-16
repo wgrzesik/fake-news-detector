@@ -335,7 +335,7 @@ def main(cfg: DictConfig):
     failed_experiments = []
 
     # Resume support: skip experiments that already completed
-    resume_enabled = cfg.get("resume", True)
+    resume_enabled = cfg.get("resume", False)
     completed_keys: set = set()
     if resume_enabled:
         completed_keys = get_completed_experiments(
