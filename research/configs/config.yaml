@@ -7,7 +7,7 @@ base_data_dir: "research/configs/datasets/processed"
 # Resume training after disconnection (e.g. Google Colab timeout).
 # Completed experiments are detected from experiments/metrics/training_results.csv.
 # Transformer epoch checkpoints are saved to saved_models/ (symlinked to Drive).
-resume: true
+resume: false
 save_checkpoints: true
 
 datasets_list:
