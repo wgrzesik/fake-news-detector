@@ -224,6 +224,8 @@ def run_single_trial_transformer(
     embedding_name: str,
     dataset_name: str,
     preprocessing_name: str,
+    cached_tokenizer=None,
+    cached_model_state=None,
 ):
     """Run a single Optuna trial for a transformer model (operates on raw text).
 
@@ -264,6 +266,14 @@ def run_single_trial_transformer(
                 embedding_type=embedding_name,
                 **model_params
             )
+
+            # Reuse cached tokenizer and model weights to avoid re-downloading
+            if cached_tokenizer is not None:
+                model.tokenizer = cached_tokenizer
+            if cached_model_state is not None:
+                model.transformer_model.load_state_dict(
+                    copy.deepcopy(cached_model_state)
+                )
 
             # Train on raw text with pruning support
             model.train(
@@ -469,11 +479,20 @@ def main(cfg: DictConfig):
                             "model": model_name,
                             "embedding": embedding_name,
                             "preprocessing": preprocessing_name,
-                            "n_trials": cfg.optuna.n_trials,
+                            "n_trials": (
+                                cfg.optuna.get('n_trials_transformer', cfg.optuna.n_trials)
+                                if is_transformer
+                                else cfg.optuna.n_trials
+                            ),
                         })
 
                         # Optuna optimization
-                        print(f"[Optuna] Running {cfg.optuna.n_trials} trials...")
+                        n_trials = (
+                            cfg.optuna.get('n_trials_transformer', cfg.optuna.n_trials)
+                            if is_transformer
+                            else cfg.optuna.n_trials
+                        )
+                        print(f"[Optuna] Running {n_trials} trials...")
 
                         sampler = TPESampler(seed=cfg.seed)
                         pruner = MedianPruner(n_startup_trials=2) if is_transformer else None
@@ -498,6 +517,21 @@ def main(cfg: DictConfig):
 
                         # Define objective (transformer vs classic) ──
                         if is_transformer:
+                            # Cache tokenizer and base model weights once
+                            _cache_model = ModelFactory.get_model(
+                                dataset_name=dataset_name,
+                                model_type=model_name,
+                                embedding_type=embedding_name,
+                            )
+                            cached_tokenizer = _cache_model.tokenizer
+                            cached_model_state = copy.deepcopy(
+                                _cache_model.transformer_model.state_dict()
+                            )
+                            del _cache_model
+                            import torch as _torch
+                            if _torch.cuda.is_available():
+                                _torch.cuda.empty_cache()
+
                             def objective(trial):
                                 return run_single_trial_transformer(
                                     trial=trial,
@@ -510,6 +544,8 @@ def main(cfg: DictConfig):
                                     embedding_name=embedding_name,
                                     dataset_name=dataset_name,
                                     preprocessing_name=preprocessing_name,
+                                    cached_tokenizer=cached_tokenizer,
+                                    cached_model_state=cached_model_state,
                                 )
                         else:
                             def objective(trial):
@@ -529,7 +565,7 @@ def main(cfg: DictConfig):
 
                         study.optimize(
                             objective,
-                            n_trials=cfg.optuna.n_trials,
+                            n_trials=n_trials,
                             timeout=cfg.optuna.get('timeout', None),
                             show_progress_bar=False
                         )

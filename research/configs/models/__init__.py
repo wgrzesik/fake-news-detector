@@ -8,3 +8,5 @@ from .dt import DecisionTreeModel
 from .xgb import XGBoostModel
 from .bert import BertModel
 from .roberta import RobertaModel
+from .fakebert import FakeBertModel
+from .distilbert import DistilBertModel

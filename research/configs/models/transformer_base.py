@@ -279,6 +279,9 @@ class TransformerBaseModel(BaseModel):
             return
 
         self.transformer_model.train()
+        best_val_f1 = -1.0
+        patience_counter = 0
+        early_stop_patience = 1  # stop if no improvement for 1 epoch
         for epoch in range(start_epoch, self.num_epochs):
             epoch_loss = 0.0
             optimizer.zero_grad()
@@ -318,6 +321,16 @@ class TransformerBaseModel(BaseModel):
                 if trial.should_prune():
                     print(f"  Trial pruned at epoch {epoch + 1}")
                     raise __import__("optuna").TrialPruned()
+
+                # Early stopping check
+                if val_f1 > best_val_f1:
+                    best_val_f1 = val_f1
+                    patience_counter = 0
+                else:
+                    patience_counter += 1
+                    if patience_counter >= early_stop_patience:
+                        print(f"  Early stopping at epoch {epoch + 1} (no improvement for {early_stop_patience} epoch(s))")
+                        break
 
             # Save checkpoint after each epoch
             if self.save_checkpoints:

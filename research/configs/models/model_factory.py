@@ -1,7 +1,7 @@
 from typing import List
 from .base_model import BaseModel
 from research.configs.models import SVMModel, LogisticRegressionModel, NaiveBayesModel, MultinomialNaiveBayesModel, \
-    KNNModel, RandomForestModel, DecisionTreeModel, XGBoostModel, BertModel, RobertaModel
+    KNNModel, RandomForestModel, DecisionTreeModel, XGBoostModel, BertModel, RobertaModel, FakeBertModel, DistilBertModel
 
 
 class ModelFactory:
@@ -18,10 +18,12 @@ class ModelFactory:
         'xgb': XGBoostModel,
         'bert': BertModel,
         'roberta': RobertaModel,
+        'fakebert': FakeBertModel,
+        'distilbert': DistilBertModel,
     }
 
     # Models whose training / evaluation operates on raw text, not pre-computed vectors
-    TRANSFORMER_MODELS = {'bert', 'roberta'}
+    TRANSFORMER_MODELS = {'bert', 'roberta', 'fakebert', 'distilbert'}
 
     # Compatibility map: Model Type -> List of allowed embeddings types
     COMPATIBILITY_MAP = {
@@ -40,7 +42,9 @@ class ModelFactory:
 
         # Transformer Models (embeddings are inherent to the pre-trained models name)
         'bert': ['bert-base-uncased'],
-        'roberta': ['roberta-base']
+        'roberta': ['roberta-base'],
+        'fakebert': ['bert-base-uncased'],
+        'distilbert': ['distilbert-base-uncased'],
     }
 
     # Preprocessing map: Model Type -> required preprocessing mode
@@ -61,6 +65,8 @@ class ModelFactory:
         # Transformer Models – minimal preprocessing (BERT tokenizer handles the rest)
         'bert': 'bert',
         'roberta': 'bert',
+        'fakebert': 'bert',
+        'distilbert': 'bert',
     }
 
     @staticmethod
