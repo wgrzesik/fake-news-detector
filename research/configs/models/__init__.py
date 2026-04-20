@@ -10,3 +10,7 @@ from .bert import BertModel
 from .roberta import RobertaModel
 from .fakebert import FakeBertModel
 from .distilbert import DistilBertModel
+from .lstm import LSTMModel
+from .gru import GRUModel
+from .bilstm import BiLSTMModel
+from .cnn import CNNModel

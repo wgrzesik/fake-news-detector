@@ -24,6 +24,10 @@ models_to_optimize:
   - rf
   - svm
   - xgb
+  - lstm
+  - gru
+  - bilstm
+  - cnn
   - bert
   - roberta
   - fakebert
@@ -139,6 +143,138 @@ models:
         type: int
         low: 50
         high: 300
+
+  lstm:
+    hidden_size: 128
+    num_layers: 1
+    dropout: 0.3
+    num_epochs: 5
+    batch_size: 32
+    learning_rate: 1.0e-3
+    max_seq_len: 200
+    embedding_dim: 100
+    optuna:
+      hidden_size:
+        type: categorical
+        choices: [64, 128, 256]
+      num_layers:
+        type: int
+        low: 1
+        high: 2
+      dropout:
+        type: float
+        low: 0.1
+        high: 0.5
+      learning_rate:
+        type: float
+        low: 1.0e-4
+        high: 1.0e-2
+        log: true
+      batch_size:
+        type: categorical
+        choices: [32, 64]
+      num_epochs:
+        type: int
+        low: 3
+        high: 8
+
+  gru:
+    hidden_size: 128
+    num_layers: 1
+    dropout: 0.3
+    num_epochs: 5
+    batch_size: 32
+    learning_rate: 1.0e-3
+    max_seq_len: 200
+    embedding_dim: 100
+    optuna:
+      hidden_size:
+        type: categorical
+        choices: [64, 128, 256]
+      num_layers:
+        type: int
+        low: 1
+        high: 2
+      dropout:
+        type: float
+        low: 0.1
+        high: 0.5
+      learning_rate:
+        type: float
+        low: 1.0e-4
+        high: 1.0e-2
+        log: true
+      batch_size:
+        type: categorical
+        choices: [32, 64]
+      num_epochs:
+        type: int
+        low: 3
+        high: 8
+
+  bilstm:
+    hidden_size: 128
+    num_layers: 1
+    dropout: 0.3
+    num_epochs: 5
+    batch_size: 32
+    learning_rate: 1.0e-3
+    max_seq_len: 200
+    embedding_dim: 100
+    optuna:
+      hidden_size:
+        type: categorical
+        choices: [64, 128, 256]
+      num_layers:
+        type: int
+        low: 1
+        high: 2
+      dropout:
+        type: float
+        low: 0.1
+        high: 0.5
+      learning_rate:
+        type: float
+        low: 1.0e-4
+        high: 1.0e-2
+        log: true
+      batch_size:
+        type: categorical
+        choices: [32, 64]
+      num_epochs:
+        type: int
+        low: 3
+        high: 8
+
+  cnn:
+    num_filters: 128
+    kernel_sizes: [2, 3, 4]
+    dropout: 0.3
+    num_epochs: 5
+    batch_size: 32
+    learning_rate: 1.0e-3
+    max_seq_len: 200
+    embedding_dim: 100
+    optuna:
+      num_filters:
+        type: categorical
+        choices: [64, 128, 256]
+      dropout:
+        type: float
+        low: 0.1
+        high: 0.5
+      learning_rate:
+        type: float
+        low: 1.0e-4
+        high: 1.0e-2
+        log: true
+      batch_size:
+        type: categorical
+        choices: [32, 64]
+      num_epochs:
+        type: int
+        low: 3
+        high: 8
 
   bert:
     learning_rate: 2.0e-5
@@ -297,6 +433,7 @@ datasets:
 optuna:
   n_trials: 10
   n_trials_transformer: 5
+  n_trials_dl: 8
   n_jobs: 2
   timeout: null
   sampler: tpe

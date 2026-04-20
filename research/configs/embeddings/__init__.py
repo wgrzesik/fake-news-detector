@@ -1,3 +1,5 @@
+GLOVE_DEFAULT_PATH = "research/configs/datasets/embeddings/glove.6B.100d.txt"
+
 from .base_embedding import BaseEmbedder
 from .embedding_factory import EmbedderFactory
 

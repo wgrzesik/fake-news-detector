@@ -437,17 +437,19 @@ def main(cfg: DictConfig):
                     continue
 
                 is_transformer = ModelFactory.is_transformer_model(model_name)
+                is_dl = ModelFactory.is_dl_model(model_name)
+                is_raw_text_model = is_transformer or is_dl
 
                 try:
                     # Validate compatibility
                     validate_compatibility(model_name, embedding_name, preprocessing_name)
 
-                    # Embedding step (skipped for transformers) ──
+                    # Embedding step (skipped for transformers and DL models) ──
                     embedder = None
                     X_train_vec = None
                     X_test_vec = None
 
-                    if not is_transformer:
+                    if not is_raw_text_model:
                         print(f"[Embedding] {embedding_name}")
                         t_emb_start = datetime.now()
                         X_train_vec, embedder = embed_data(
@@ -459,7 +461,7 @@ def main(cfg: DictConfig):
                         emb_time = (datetime.now() - t_emb_start).total_seconds()
                         print(f"Vectorized: {X_train_vec.shape} ({emb_time:.2f}s)")
                     else:
-                        print(f"[Transformer] Tokenization handled internally by {model_name}")
+                        print(f"[{'DL' if is_dl else 'Transformer'}] Tokenization handled internally by {model_name}")
 
                     run_name = (
                         f"{dataset_name}_{model_name}_{embedding_name}_{preprocessing_name}"
@@ -480,7 +482,9 @@ def main(cfg: DictConfig):
                             "embedding": embedding_name,
                             "preprocessing": preprocessing_name,
                             "n_trials": (
-                                cfg.optuna.get('n_trials_transformer', cfg.optuna.n_trials)
+                                cfg.optuna.get('n_trials_dl', cfg.optuna.get('n_trials_transformer', cfg.optuna.n_trials))
+                                if is_dl
+                                else cfg.optuna.get('n_trials_transformer', cfg.optuna.n_trials)
                                 if is_transformer
                                 else cfg.optuna.n_trials
                             ),
@@ -488,14 +492,16 @@ def main(cfg: DictConfig):
 
                         # Optuna optimization
                         n_trials = (
-                            cfg.optuna.get('n_trials_transformer', cfg.optuna.n_trials)
+                            cfg.optuna.get('n_trials_dl', cfg.optuna.get('n_trials_transformer', cfg.optuna.n_trials))
+                            if is_dl
+                            else cfg.optuna.get('n_trials_transformer', cfg.optuna.n_trials)
                             if is_transformer
                             else cfg.optuna.n_trials
                         )
                         print(f"[Optuna] Running {n_trials} trials...")
 
                         sampler = TPESampler(seed=cfg.seed)
-                        pruner = MedianPruner(n_startup_trials=2) if is_transformer else None
+                        pruner = MedianPruner(n_startup_trials=2) if is_raw_text_model else None
                         try:
                             study = optuna.create_study(
                                 sampler=sampler,
@@ -515,9 +521,10 @@ def main(cfg: DictConfig):
                                 study_name=run_name,
                             )
 
-                        # Define objective (transformer vs classic) ──
+                        # Define objective (transformer vs DL vs classic) ──
                         if is_transformer:
-                            # Cache tokenizer and base model weights once
+                            # Cache HuggingFace tokenizer and base model weights once
+                            # to avoid re-downloading during every Optuna trial.
                             _cache_model = ModelFactory.get_model(
                                 dataset_name=dataset_name,
                                 model_type=model_name,
@@ -546,6 +553,21 @@ def main(cfg: DictConfig):
                                     preprocessing_name=preprocessing_name,
                                     cached_tokenizer=cached_tokenizer,
                                     cached_model_state=cached_model_state,
+                                )
+                        elif is_dl:
+                            # DL sequence models: raw-text interface, no HF caching needed.
+                            def objective(trial):
+                                return run_single_trial_transformer(
+                                    trial=trial,
+                                    cfg=cfg,
+                                    X_train_texts=X_train_preprocessed,
+                                    X_test_texts=X_test_preprocessed,
+                                    y_train=y_train,
+                                    y_test=y_test,
+                                    model_name=model_name,
+                                    embedding_name=embedding_name,
+                                    dataset_name=dataset_name,
+                                    preprocessing_name=preprocessing_name,
                                 )
                         else:
                             def objective(trial):
@@ -589,8 +611,8 @@ def main(cfg: DictConfig):
                         )
 
                         # Train & evaluate final model ──
-                        if is_transformer:
-                            # Transformer: train and evaluate on raw text
+                        if is_raw_text_model:
+                            # Transformer / DL: train and evaluate on raw text
                             t_train = datetime.now()
                             final_model.train(X_train_preprocessed, y_train)
                             train_time = (datetime.now() - t_train).total_seconds()
