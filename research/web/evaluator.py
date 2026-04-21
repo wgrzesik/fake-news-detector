@@ -79,9 +79,11 @@ class WebTestEvaluator:
         try:
             # Transformers operate on raw text (their own tokenizer handles everything)
             is_transformer = getattr(model, "is_transformer", False)
+            # DL sequence models (lstm/gru/bilstm/cnn) also operate on raw text directly
+            is_dl_model = ModelFactory.is_dl_model(model_name)
 
-            if is_transformer:
-                # Transformers do their own preprocessing internally
+            if is_transformer or is_dl_model:
+                # Transformers and DL models do their own preprocessing internally
                 X_web_proc = self._preprocess_texts(X_web, preprocessing_name, text_type)
                 metrics = model.evaluate(X_web_proc, y_web)
             else:

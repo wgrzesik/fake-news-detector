@@ -53,10 +53,12 @@ class WebTestRunner:
 
             # Check if it's a complete model directory
             # ML models save classifier.joblib; transformers save a transformer/ subfolder
+            # DL sequence models (lstm/gru/bilstm/cnn) save model.pt + meta.joblib
             has_classifier = (model_dir / "classifier.joblib").exists()
             has_transformer = (model_dir / "transformer").is_dir()
-            if not (has_classifier or has_transformer):
-                print(f"Skipping {model_dir.name} - missing classifier.joblib or transformer/")
+            has_dl_model = (model_dir / "model.pt").exists()
+            if not (has_classifier or has_transformer or has_dl_model):
+                print(f"Skipping {model_dir.name} - missing classifier.joblib, transformer/ or model.pt")
                 continue
 
             # Extract model name and embedding from directory name
