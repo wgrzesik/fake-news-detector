@@ -12,6 +12,7 @@ from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
     get_linear_schedule_with_warmup,
+    get_cosine_schedule_with_warmup,
     DataCollatorWithPadding,
 )
 
@@ -71,10 +72,14 @@ class TransformerBaseModel(BaseModel):
         self.max_length = int(kwargs.get("max_length", 128))  # reduced from 512
         self.weight_decay = float(kwargs.get("weight_decay", 0.01))
         self.warmup_ratio = float(kwargs.get("warmup_ratio", 0.1))
-        self.gradient_accumulation_steps = int(kwargs.get("gradient_accumulation_steps", 1))
+        self.gradient_accumulation_steps = int(kwargs.get("gradient_accumulation_steps", 2))
         self.fp16 = bool(kwargs.get("fp16", False))
         self.save_checkpoints = bool(kwargs.get("save_checkpoints", True))
         self.num_workers = int(kwargs.get("num_workers", 2))
+        # New tunable hyperparameters
+        self.scheduler_type = str(kwargs.get("scheduler_type", "linear"))  # "linear" | "cosine"
+        self.classifier_dropout = float(kwargs.get("classifier_dropout", 0.1))
+        self.freeze_layers = int(kwargs.get("freeze_layers", 0))
 
         # Device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -108,6 +113,90 @@ class TransformerBaseModel(BaseModel):
             self.pretrained_model_name,
             num_labels=2,
         ).to(self.device)
+
+        self._patch_classifier_dropout(self.classifier_dropout)
+        self._freeze_encoder_layers(self.freeze_layers)
+
+    def _patch_classifier_dropout(self, p: float):
+        """Patch the classifier head's dropout probability in-place.
+
+        Each HuggingFace architecture exposes its classifier dropout differently,
+        so we detect the layout by inspecting the model and patch the nn.Dropout
+        module directly rather than going through model.config.
+        """
+        m = self.transformer_model
+        model_type = getattr(m.config, "model_type", "")
+
+        # Candidate attribute paths, tried in order:
+        # 1. BERT / RoBERTa-style   → model.dropout  (nn.Dropout before classifier Linear)
+        # 2. DistilBERT-style        → model.classifier (Sequential whose [0] is Linear
+        #                              and there is no standalone dropout before it, but
+        #                              model.pre_classifier exists — dropout is inside
+        #                              BertForSequenceClassification.dropout)
+        # 3. RoBERTa classification  → model.classifier.dropout
+        patched = False
+        for attr_path in (
+            "classifier.dropout",        # RoBERTa, DistilBERT
+            "dropout",                   # BERT (BertForSequenceClassification)
+        ):
+            obj = m
+            parts = attr_path.split(".")
+            try:
+                for part in parts[:-1]:
+                    obj = getattr(obj, part)
+                target = getattr(obj, parts[-1])
+                if isinstance(target, torch.nn.Dropout):
+                    target.p = p
+                    print(f"[Dropout] Patched '{attr_path}' → p={p:.3f} "
+                          f"(model_type='{model_type}')")
+                    patched = True
+                    break
+            except AttributeError:
+                continue
+
+        if not patched:
+            print(f"[Dropout] WARNING: Could not find classifier head dropout "
+                  f"for model_type='{model_type}'. Skipping dropout patch.")
+
+    def _freeze_encoder_layers(self, n: int):
+        """Freeze the first *n* encoder layers (0 = no freezing).
+
+        Supports BERT/RoBERTa (model.bert.encoder.layer / model.roberta.encoder.layer)
+        and DistilBERT (model.distilbert.transformer.layer).
+        """
+        if n <= 0:
+            return
+
+        m = self.transformer_model
+
+        # Possible encoder layer list locations
+        layer_list = None
+        for attr_path in (
+            "bert.encoder.layer",
+            "roberta.encoder.layer",
+            "distilbert.transformer.layer",
+        ):
+            obj = m
+            try:
+                for part in attr_path.split("."):
+                    obj = getattr(obj, part)
+                layer_list = obj
+                break
+            except AttributeError:
+                continue
+
+        if layer_list is None:
+            print(f"[Freeze] WARNING: Could not locate encoder layers. "
+                  f"No layers frozen.")
+            return
+
+        total = len(layer_list)
+        n_clamped = min(n, total)
+        for layer in layer_list[:n_clamped]:
+            for param in layer.parameters():
+                param.requires_grad = False
+
+        print(f"[Freeze] Froze {n_clamped}/{total} encoder layers.")
 
     def _create_dataloader(self, texts, labels, shuffle=False):
         """Create a DataLoader with pre-tokenized dataset and dynamic padding."""
@@ -250,24 +339,34 @@ class TransformerBaseModel(BaseModel):
               f"(lr={self.learning_rate}, epochs={self.num_epochs}, "
               f"batch={self.batch_size}, max_len={self.max_length}, "
               f"fp16={self.use_fp16}, checkpoints={self.save_checkpoints}, "
-              f"num_workers={self.num_workers})")
+              f"num_workers={self.num_workers}, scheduler={self.scheduler_type}, "
+              f"classifier_dropout={self.classifier_dropout}, "
+              f"freeze_layers={self.freeze_layers}, "
+              f"grad_accum={self.gradient_accumulation_steps})")
 
         # Pre-tokenize once (not per-batch)
         dataloader = self._create_dataloader(X_train_raw, y_train, shuffle=True)
 
         optimizer = torch.optim.AdamW(
-            self.transformer_model.parameters(),
+            filter(lambda p: p.requires_grad, self.transformer_model.parameters()),
             lr=self.learning_rate,
             weight_decay=self.weight_decay,
         )
 
         total_steps = (len(dataloader) // self.gradient_accumulation_steps) * self.num_epochs
         warmup_steps = int(total_steps * self.warmup_ratio)
-        scheduler = get_linear_schedule_with_warmup(
-            optimizer,
-            num_warmup_steps=warmup_steps,
-            num_training_steps=total_steps,
-        )
+        if self.scheduler_type == "cosine":
+            scheduler = get_cosine_schedule_with_warmup(
+                optimizer,
+                num_warmup_steps=warmup_steps,
+                num_training_steps=total_steps,
+            )
+        else:
+            scheduler = get_linear_schedule_with_warmup(
+                optimizer,
+                num_warmup_steps=warmup_steps,
+                num_training_steps=total_steps,
+            )
 
         # Try to resume from checkpoint
         start_epoch = 0

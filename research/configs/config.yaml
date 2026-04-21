@@ -280,10 +280,13 @@ models:
     learning_rate: 2.0e-5
     num_epochs: 3
     batch_size: 16
-    max_length: 128
+    max_length: 256
     weight_decay: 0.01
     warmup_ratio: 0.1
-    gradient_accumulation_steps: 1
+    gradient_accumulation_steps: 2
+    scheduler_type: linear
+    classifier_dropout: 0.1
+    freeze_layers: 0
     fp16: true
     save_checkpoints: true
     num_workers: 2
@@ -291,7 +294,7 @@ models:
       learning_rate:
         type: float
         low: 1.0e-5
-        high: 5.0e-4
+        high: 5.0e-5
         log: true
       num_epochs:
         type: int
@@ -302,7 +305,7 @@ models:
         choices: [16, 32]
       max_length:
         type: categorical
-        choices: [128]
+        choices: [128, 256, 512]
       weight_decay:
         type: float
         low: 0.0
@@ -311,15 +314,32 @@ models:
         type: float
         low: 0.0
         high: 0.2
+      gradient_accumulation_steps:
+        type: categorical
+        choices: [1, 2, 4]
+      scheduler_type:
+        type: categorical
+        choices: [linear, cosine]
+      classifier_dropout:
+        type: float
+        low: 0.0
+        high: 0.3
+      freeze_layers:
+        type: int
+        low: 0
+        high: 8
 
   roberta:
     learning_rate: 2.0e-5
     num_epochs: 3
     batch_size: 16
-    max_length: 128
+    max_length: 256
     weight_decay: 0.01
     warmup_ratio: 0.1
-    gradient_accumulation_steps: 1
+    gradient_accumulation_steps: 2
+    scheduler_type: linear
+    classifier_dropout: 0.1
+    freeze_layers: 0
     fp16: true
     save_checkpoints: true
     num_workers: 2
@@ -327,7 +347,7 @@ models:
       learning_rate:
         type: float
         low: 1.0e-5
-        high: 5.0e-4
+        high: 5.0e-5
         log: true
       num_epochs:
         type: int
@@ -338,7 +358,7 @@ models:
         choices: [16, 32]
       max_length:
         type: categorical
-        choices: [128]
+        choices: [128, 256, 512]
       weight_decay:
         type: float
         low: 0.0
@@ -347,15 +367,32 @@ models:
         type: float
         low: 0.0
         high: 0.2
+      gradient_accumulation_steps:
+        type: categorical
+        choices: [1, 2, 4]
+      scheduler_type:
+        type: categorical
+        choices: [linear, cosine]
+      classifier_dropout:
+        type: float
+        low: 0.0
+        high: 0.3
+      freeze_layers:
+        type: int
+        low: 0
+        high: 8
 
   fakebert:
     learning_rate: 2.0e-5
     num_epochs: 3
     batch_size: 16
-    max_length: 128
+    max_length: 256
     weight_decay: 0.01
     warmup_ratio: 0.1
-    gradient_accumulation_steps: 1
+    gradient_accumulation_steps: 2
+    scheduler_type: linear
+    classifier_dropout: 0.1
+    freeze_layers: 0
     fp16: true
     save_checkpoints: true
     num_workers: 2
@@ -363,7 +400,7 @@ models:
       learning_rate:
         type: float
         low: 1.0e-5
-        high: 5.0e-4
+        high: 5.0e-5
         log: true
       num_epochs:
         type: int
@@ -374,7 +411,7 @@ models:
         choices: [16, 32]
       max_length:
         type: categorical
-        choices: [128]
+        choices: [128, 256, 512]
       weight_decay:
         type: float
         low: 0.0
@@ -383,15 +420,32 @@ models:
         type: float
         low: 0.0
         high: 0.2
+      gradient_accumulation_steps:
+        type: categorical
+        choices: [1, 2, 4]
+      scheduler_type:
+        type: categorical
+        choices: [linear, cosine]
+      classifier_dropout:
+        type: float
+        low: 0.0
+        high: 0.3
+      freeze_layers:
+        type: int
+        low: 0
+        high: 8
 
   distilbert:
     learning_rate: 2.0e-5
     num_epochs: 3
     batch_size: 16
-    max_length: 128
+    max_length: 256
     weight_decay: 0.01
     warmup_ratio: 0.1
-    gradient_accumulation_steps: 1
+    gradient_accumulation_steps: 2
+    scheduler_type: linear
+    classifier_dropout: 0.1
+    freeze_layers: 0
     fp16: true
     save_checkpoints: true
     num_workers: 2
@@ -399,7 +453,7 @@ models:
       learning_rate:
         type: float
         low: 1.0e-5
-        high: 5.0e-4
+        high: 5.0e-5
         log: true
       num_epochs:
         type: int
@@ -410,7 +464,7 @@ models:
         choices: [16, 32]
       max_length:
         type: categorical
-        choices: [128]
+        choices: [128, 256, 512]
       weight_decay:
         type: float
         low: 0.0
@@ -419,6 +473,20 @@ models:
         type: float
         low: 0.0
         high: 0.2
+      gradient_accumulation_steps:
+        type: categorical
+        choices: [1, 2, 4]
+      scheduler_type:
+        type: categorical
+        choices: [linear, cosine]
+      classifier_dropout:
+        type: float
+        low: 0.0
+        high: 0.3
+      freeze_layers:
+        type: int
+        low: 0
+        high: 4
 
 embeddings:
   name: tfidf
@@ -432,7 +500,7 @@ datasets:
 # Optuna config
 optuna:
   n_trials: 10
-  n_trials_transformer: 5
+  n_trials_transformer: 10
   n_trials_dl: 8
   n_jobs: 2
   timeout: null
