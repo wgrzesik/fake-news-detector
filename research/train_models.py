@@ -141,6 +141,9 @@ def get_predictions_and_probs(model, X_test_vec: np.ndarray):
 def get_predictions_and_probs_transformer(model, X_test_texts: List[str]):
     """Get predictions and probabilities from a transformer model (operates on raw text)."""
     y_pred, y_probs = model._predict_batch(X_test_texts)
+    # y_probs may be 2-D (n_samples, n_classes); extract positive-class prob to keep 1-D
+    if y_probs.ndim == 2:
+        y_probs = y_probs[:, 1]
     return y_pred, y_probs
 
 
