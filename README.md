@@ -7,19 +7,21 @@ A comprehensive machine learning project for detecting fake news using various N
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [Architecture](#architecture)
-3. [Project Structure](#project-structure)
-4. [Prerequisites](#prerequisites)
-5. [Installation & Setup](#installation--setup)
-6. [Research Pipeline — Quick Start](#research-pipeline--quick-start)
-7. [Experiment Outputs](#experiment-outputs)
-8. [MLflow Tracking](#mlflow-tracking)
-9. [Chrome Extension](#chrome-extension)
-10. [Models & Embeddings Reference](#models--embeddings-reference)
-11. [Smart Routing Logic](#smart-routing-logic)
-12. [Datasets](#datasets)
-13. [Docker](#docker)
-14. [Contributing](#contributing)
+2. [How it Works](#how-it-works)
+3. [Architecture](#architecture)
+4. [Project Structure](#project-structure)
+5. [Prerequisites](#prerequisites)
+6. [Installation & Setup](#installation--setup)
+7. [Research Pipeline — Quick Start](#research-pipeline--quick-start)
+8. [Google Colab](#google-colab)
+9. [Experiment Outputs](#experiment-outputs)
+10. [MLflow Tracking](#mlflow-tracking)
+11. [Chrome Extension](#chrome-extension)
+12. [Models & Embeddings Reference](#models--embeddings-reference)
+13. [Smart Routing Logic](#smart-routing-logic)
+14. [Datasets](#datasets)
+15. [Docker](#docker)
+16. [Contributing](#contributing)
 
 ---
 
@@ -31,6 +33,45 @@ The project has two main components:
 |---|---|
 | **Research framework** | Hydra/Optuna training pipeline, web scraping, web testing, and result tracking |
 | **Chrome extension** | Browser popup that sends selected text to the FastAPI backend and displays a real/fake verdict |
+
+---
+
+## How it Works
+
+### Research pipeline
+
+1. **Dataset loading** — Three labelled news datasets (ISOT, LIAR, WELFake) are read from pre-split `train.csv` / `test.csv` files. Each row contains a `text` column and a binary `label` (0 = fake, 1 = real).
+
+2. **Preprocessing** — `TextPreprocessor` applies one of two strategies selected automatically from `ModelFactory.PREPROCESSING_MAP`:
+   - `classic` — lowercase, strip URLs/HTML, remove punctuation and digits, collapse whitespace. Used for all classical ML and deep learning models.
+   - `bert` — whitespace normalisation only. Used for HuggingFace transformer models to preserve casing and subword boundaries.
+
+3. **Embedding** — For classical ML and deep learning models the preprocessed text is converted to dense vectors:
+   - `tfidf` / `bow` — sparse count-based representations fit on the training split.
+   - `word2vec` / `glove` — each document is represented as the average of its token embeddings.
+   - Transformer and DL models tokenise text internally; no external embedder step is needed.
+
+4. **Hyperparameter optimisation** — [Optuna](https://optuna.org/) runs `n_trials` experiments per model × embedding × dataset combination. A `TPESampler` proposes candidates and a `MedianPruner` kills unpromising transformer trials early. The best trial's hyperparameters are used to retrain the final model.
+
+5. **Tracking** — `HybridTrackingManager` writes results simultaneously to:
+   - A local `experiments/metrics/training_results.csv` (durable, Drive-backed in Colab).
+   - An MLflow SQLite database for UI-based comparison across runs.
+   - Per-experiment JSON (best hyperparameters), CSV (trial history), and prediction files.
+
+6. **Serialisation** — The final model (`classifier.joblib`), embedder (`embedder.pkl`), and optional scaler (`scaler.joblib`) are saved to `saved_models/{dataset}/{model_name}/`.
+
+### API prediction
+
+1. The FastAPI server (`backend/api.py`) loads three specialised models at startup via the `lifespan` context manager.
+2. `POST /predict` receives a JSON body `{"text": "..."}`.
+3. A word-count heuristic selects the best model (see [Smart Routing Logic](#smart-routing-logic)).
+4. The selected model's `predict()` method preprocesses the text, vectorises it, runs inference, and returns a `label`, `score`, and metadata dict.
+
+### Chrome extension
+
+1. The user highlights text on any webpage and clicks the extension icon.
+2. `popup.js` reads the selection via `window.getSelection()` and POSTs it to `http://127.0.0.1:8000/predict`.
+3. The verdict (`REAL` / `FAKE`) and confidence score are displayed with colour-coded styling.
 
 ---
 
@@ -225,6 +266,39 @@ python -m research.analyze_results
 
 ---
 
+## Google Colab
+
+The repository includes `fake_news_detector.ipynb` for running the full training pipeline on Google Colab with automatic Google Drive persistence. This is the recommended approach for training transformer and deep learning models, which benefit from GPU acceleration.
+
+### First-time setup
+
+1. Upload your datasets and pre-trained word vectors to `My Drive/fake-news-results/`:
+   ```
+   fake-news-results/
+   └── datasets/
+       ├── processed/      ← ISOT/, LIAR/, WELFake/ (train.csv, test.csv)
+       └── embeddings/     ← glove.6B.100d.txt, GoogleNews-vectors-negative300.bin
+   ```
+2. Copy `colab_secrets.json.template` to `colab_secrets.json` and fill in your GitHub personal access token (already in `.gitignore`).
+
+### Notebook cells
+
+| Cell | Description |
+|---|---|
+| 0 — Configuration | Loads `colab_secrets.json` for repo URL and Drive paths |
+| 1 — Mount Drive | `drive.mount("/content/drive")` |
+| 2 — Clone / pull repo | Clones on first run; pulls latest changes on subsequent runs |
+| 3 — Symlink setup | Links Drive folders into the project via `colab_setup.py` |
+| 4 — Install deps | `pip install -r requirements.txt` |
+| 5 — Train models | `python -m research.train_models` (all Hydra overrides apply) |
+| 6 — Collect web data | `python -m research.web.collect_web` |
+| 7 — Evaluate on web | `python -m research.evaluate_web` |
+| 8 — Analyse results | `python -m research.analyze_results` |
+
+All outputs (models, experiments, MLflow DB) are written back to Drive, so interrupted sessions resume from where they left off.
+
+---
+
 ## Experiment Outputs
 
 ### Unified result schema
@@ -305,11 +379,11 @@ The server starts on `http://127.0.0.1:8000`. It loads three pre-trained models 
 
 ## Models & Embeddings Reference
 
-### Supported models
+### Classical ML models
 
 | Key | Algorithm |
 |---|---|
-| `svm` | Support Vector Machine |
+| `svm` | Support Vector Machine (LinearSVC + calibrated probabilities) |
 | `lr` | Logistic Regression |
 | `rf` | Random Forest |
 | `dt` | Decision Tree |
@@ -318,16 +392,41 @@ The server starts on `http://127.0.0.1:8000`. It loads three pre-trained models 
 | `mnb` | Multinomial Naive Bayes |
 | `knn` | K-Nearest Neighbours |
 
+### Deep learning models
+
+| Key | Architecture |
+|---|---|
+| `lstm` | LSTM (unidirectional) |
+| `gru` | GRU |
+| `bilstm` | Bidirectional LSTM |
+| `cnn` | 1-D Convolutional Neural Network |
+
+Deep learning models receive raw (pre-cleaned) text; word vectors are loaded internally.
+
+### Transformer models
+
+| Key | Pretrained checkpoint |
+|---|---|
+| `bert` | `bert-base-uncased` |
+| `roberta` | `roberta-base` |
+| `distilbert` | `distilbert-base-uncased` |
+| `fakebert` | `bert-base-uncased` (domain-tuned variant) |
+
+Transformer models use light preprocessing (whitespace normalisation only) and tokenise text internally via HuggingFace Tokenizers.
+
 ### Supported embeddings
 
-| Key | Method |
-|---|---|
-| `tfidf` | TF-IDF |
-| `bow` | Bag of Words |
-| `word2vec` | Word2Vec (average pooling) |
-| `glove` | GloVe (average pooling) |
+| Key | Method | Used with |
+|---|---|---|
+| `tfidf` | TF-IDF | Classical ML |
+| `bow` | Bag of Words | Classical ML |
+| `word2vec` | Word2Vec (average pooling) | Classical ML, DL |
+| `glove` | GloVe (average pooling) | Classical ML, DL |
+| `bert-base-uncased` | BERT tokeniser | `bert`, `fakebert` |
+| `roberta-base` | RoBERTa tokeniser | `roberta` |
+| `distilbert-base-uncased` | DistilBERT tokeniser | `distilbert` |
 
-Not all model × embedding combinations are valid. The `ModelFactory` validates compatibility automatically.
+Not all model × embedding combinations are valid. The `ModelFactory` validates compatibility automatically and raises an error on mismatches.
 
 ---
 

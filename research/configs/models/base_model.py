@@ -24,7 +24,7 @@ class BaseModel(ABC):
         return os.path.join("saved_models", self.dataset_name, self.model_name)
 
     def train(self, X_train_raw: List[str], y_train: List[int]) -> None:
-        """Full pipeline: Clean -> Vectorize -> Fit."""
+        """Vectorize raw (pre-cleaned) text then fit the classifier."""
         print(f"Training {self.model_name} (Standard Path)")
         X_vec = self.embedder.fit_transform(X_train_raw)
 
@@ -34,7 +34,7 @@ class BaseModel(ABC):
         self.classifier.fit(X_vec, y_train)
 
     def evaluate(self, X_test_raw: List[str], y_test: List[int]) -> Dict[str, float]:
-        """Full pipeline: Clean -> Transform -> Predict -> Metrics."""
+        """Transform pre-cleaned text, run predictions, and return metrics."""
         X_vec = self.embedder.transform(X_test_raw)
         return self.evaluate_on_vectors(X_vec, y_test)
 

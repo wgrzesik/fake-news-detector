@@ -61,3 +61,10 @@ results_*.csv
 # Old notebook backup
 fake_news_detector_old.ipynb
 
+# SECURITY: Private configuration files with credentials
+.secrets.json
+.env
+.env.local
+research/colab/colab_secrets.json
+credentials.json
+

@@ -1,5 +1,6 @@
 import os
 import sys
+from contextlib import asynccontextmanager
 from typing import Dict, Any
 
 import uvicorn
@@ -19,7 +20,35 @@ except ImportError as e:
     print("IMPORT ERROR: Could not find files in the /research folder.")
     raise e
 
-app = FastAPI(title="Smart Fake News Detector API")
+MODELS: Dict[str, Any] = {}
+
+_MODEL_CONFIGS = {
+    "short_text": {"dataset": "ISOT", "type": "rf", "emb": "bow"},
+    "long_article": {"dataset": "LIAR", "type": "bilstm", "emb": "glove"},
+    "general": {"dataset": "ISOT", "type": "roberta", "emb": "roberta-base"},
+}
+
+
+def load_all_required_models() -> None:
+    """Load startup models pre-trained on different datasets and text lengths."""
+    for key, cfg in _MODEL_CONFIGS.items():
+        try:
+            print(f"Loading model for category: {key} ({cfg['dataset']})...")
+            model = ModelFactory.get_model(cfg['dataset'], cfg['type'], cfg['emb'])
+            model.load()
+            MODELS[key] = model
+            print(f"Model {key} is ready.")
+        except Exception as e:
+            print(f"! Failed to load model {key}: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    load_all_required_models()
+    yield
+
+
+app = FastAPI(title="Smart Fake News Detector API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,32 +58,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MODELS: Dict[str, Any] = {}
-
-def load_all_required_models():
-    """
-    Loads a set of startup models.
-    These models are pre-trained on different datasets and optimized for different text lengths.
-    """
-    configs = {
-        "short_text": {"datasets": "LIAR", "type": "lr", "emb": "word2vec"},
-       
-        "long_article": {"datasets": "ISOT", "type": "svm", "emb": "tfidf"},
-        
-        "general": {"datasets": "WELFake", "type": "xgb", "emb": "tfidf"}
-    }
-
-    for key, cfg in configs.items():
-        try:
-            print(f"Loading model for category: {key} ({cfg['datasets']})...")
-            model = ModelFactory.get_model(cfg['datasets'], cfg['type'], cfg['emb'])
-            model.load()
-            MODELS[key] = model
-            print(f"Model {key} is ready.")
-        except Exception as e:
-            print(f"! Failed to load model {key}: {e}")
-
-load_all_required_models()
 
 class TextRequest(BaseModel):
     text: str
@@ -80,7 +83,7 @@ def predict(request: TextRequest):
     
     raw_text = request.text.strip()
     if len(raw_text) < 10:
-         return {"label": "NEUTRAL", "score": 0.0, "message": "Text too short for analysis"}
+        return {"label": "NEUTRAL", "score": 0.0, "message": "Text too short for analysis"}
 
     model = select_best_model(raw_text)
     
