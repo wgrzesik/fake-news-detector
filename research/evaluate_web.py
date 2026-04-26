@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from typing import List, Optional
 
@@ -176,13 +177,15 @@ class WebTestRunner:
             )
 
             try:
-                # Load model from saved directory
+                # Load model from saved directory — time this separately
                 model = ModelFactory.get_model(
                     dataset_name=self.dataset_name,
                     model_type=model_info['model'],
                     embedding_type=model_info['embedding']
                 )
+                t_load_start = time.perf_counter()
                 model.load()
+                load_time_sec = time.perf_counter() - t_load_start
 
                 # Evaluate on web data (preprocessing resolved automatically per model)
                 result = web_tester.evaluate_model_on_web_data(
@@ -193,15 +196,22 @@ class WebTestRunner:
                     model_name=model_info['model'],
                     embedding_name=model_info['embedding'],
                     text_type=text_type,
+                    load_time_sec=load_time_sec,
                 )
 
                 if result:
                     results.append(result)
+                    timing_str = ""
+                    if result.get('load_time_sec') is not None:
+                        timing_str += f" | Load: {result['load_time_sec']:.4f}s"
+                    if result.get('inference_time_sec') is not None:
+                        timing_str += f" | Inference: {result['inference_time_sec']:.4f}s"
                     print(
                         f"F1: {result['f1_score']:.4f} | "
                         f"Acc: {result['accuracy']:.4f} | "
                         f"Precision: {result['precision']:.4f} | "
                         f"Recall: {result['recall']:.4f}"
+                        + timing_str
                     )
 
             except Exception as e:
@@ -364,6 +374,7 @@ def _save_and_print_summary(all_results, results_dir, text_type: str = "text"):
         'experiment_key', 'dataset', 'model', 'embedding', 'preprocessing',
         'test_type', 'text_type', 'num_samples',
         'accuracy', 'precision', 'recall', 'f1_score',
+        'load_time_sec', 'inference_time_sec',
         'timestamp', 'confusion_matrix',
     ]
     combined_results = combined_results[[c for c in columns if c in combined_results.columns]]
@@ -394,14 +405,16 @@ def _save_and_print_summary(all_results, results_dir, text_type: str = "text"):
     print(f"Best F1 Score: {combined_results['f1_score'].max():.4f}")
     print(f"Worst F1 Score: {combined_results['f1_score'].min():.4f}\n")
 
+    timing_cols = [c for c in ('load_time_sec', 'inference_time_sec') if c in combined_results.columns]
+
     print("Top 10 Models:")
     print(combined_results.nlargest(10, 'f1_score')[[
-        'dataset', 'model', 'embedding', 'text_type', 'f1_score', 'accuracy'
+        'dataset', 'model', 'embedding', 'text_type', 'f1_score', 'accuracy', *timing_cols
     ]].to_string(index=False))
 
     print("\nBottom 5 Models:")
     print(combined_results.nsmallest(5, 'f1_score')[[
-        'dataset', 'model', 'embedding', 'text_type', 'f1_score', 'accuracy'
+        'dataset', 'model', 'embedding', 'text_type', 'f1_score', 'accuracy', *timing_cols
     ]].to_string(index=False))
 
     # Summary by dataset

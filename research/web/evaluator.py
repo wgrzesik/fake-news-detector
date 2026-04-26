@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import datetime
 from typing import Dict, List
 
@@ -57,6 +58,7 @@ class WebTestEvaluator:
         embedding_name: str,
         preprocessing_name: str = None,
         text_type: str = "text",
+        load_time_sec: float = None,
     ):
         """
         Evaluate a trained model on web-scraped data.
@@ -82,6 +84,8 @@ class WebTestEvaluator:
             # DL sequence models (lstm/gru/bilstm/cnn) also operate on raw text directly
             is_dl_model = ModelFactory.is_dl_model(model_name)
 
+            t_infer_start = time.perf_counter()
+
             if is_transformer or is_dl_model:
                 # Transformers and DL models do their own preprocessing internally
                 X_web_proc = self._preprocess_texts(X_web, preprocessing_name, text_type)
@@ -93,33 +97,11 @@ class WebTestEvaluator:
                 X_web_proc = [str(t) if not isinstance(t, str) else t for t in X_web_proc]
                 X_web_vec = model.embedder.transform(X_web_proc)
 
-                # Diagnostic: vector and prediction analysis
-                from scipy.sparse import issparse
-                from scipy.sparse.linalg import norm as sparse_norm
-                if issparse(X_web_vec):
-                    vec_norms = np.asarray(sparse_norm(X_web_vec, axis=1)).flatten()
-                else:
-                    vec_norms = np.linalg.norm(X_web_vec, axis=1)
-                zero_vecs = np.sum(vec_norms == 0)
-                print(f"  [Diag] Vectors shape: {X_web_vec.shape} | "
-                      f"zero vectors: {zero_vecs}/{X_web_vec.shape[0]} | "
-                      f"mean norm: {vec_norms.mean():.4f}")
-
-                # Apply scaler if present (same as evaluate_on_vectors)
-                X_for_pred = X_web_vec
-                if model.scaler:
-                    X_for_pred = model.scaler.transform(X_web_vec)
-                    print(f"  [Diag] Scaler applied: {model.scaler.__class__.__name__}")
-                else:
-                    print(f"  [Diag] No scaler")
-
-                y_pred = model.classifier.predict(X_for_pred)
-                unique, counts = np.unique(y_pred, return_counts=True)
-                pred_dist = dict(zip(unique.tolist(), counts.tolist()))
-                print(f"  [Diag] Prediction distribution: {pred_dist}")
-                print(f"  [Diag] First 20 predictions: {y_pred[:20].tolist()}")
-
                 metrics = model.evaluate_on_vectors(X_web_vec, y_web)
+
+            inference_time_sec = round(time.perf_counter() - t_infer_start, 4)
+            print(f"  [Time] Inference: {inference_time_sec:.4f}s"
+                  + (f" | Load: {load_time_sec:.4f}s" if load_time_sec is not None else ""))
 
             # Create experiment key (unique per dataset + model + embedding + text_type)
             experiment_key = f"{dataset_name}_{model_name}_{embedding_name}_{text_type}"
@@ -142,6 +124,8 @@ class WebTestEvaluator:
                 'precision': round(metrics['precision'], 4),
                 'recall': round(metrics['recall'], 4),
                 'f1_score': round(metrics['f1_score'], 4),
+                'load_time_sec': round(load_time_sec, 4) if load_time_sec is not None else None,
+                'inference_time_sec': inference_time_sec,
                 'timestamp': datetime.now().isoformat(),
                 'confusion_matrix': confusion_matrix,
             }
@@ -203,6 +187,7 @@ class WebTestEvaluator:
             'experiment_key', 'dataset', 'model', 'embedding', 'preprocessing',
             'test_type', 'text_type', 'num_samples',
             'accuracy', 'precision', 'recall', 'f1_score',
+            'load_time_sec', 'inference_time_sec',
             'timestamp', 'confusion_matrix',
         ]
         results_df = results_df[[c for c in columns if c in results_df.columns]]
