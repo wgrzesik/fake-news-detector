@@ -7,22 +7,27 @@ A comprehensive machine learning project for detecting fake news using various N
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [How it Works](#how-it-works)
-3. [Architecture](#architecture)
-4. [Project Structure](#project-structure)
-5. [Prerequisites](#prerequisites)
-6. [Installation & Setup](#installation--setup)
-7. [Dataset Preprocessing](#dataset-preprocessing)
-8. [Research Pipeline — Quick Start](#research-pipeline--quick-start)
-9. [Google Colab](#google-colab)
-10. [Experiment Outputs](#experiment-outputs)
-11. [MLflow Tracking](#mlflow-tracking)
-12. [Chrome Extension](#chrome-extension)
-13. [Models & Embeddings Reference](#models--embeddings-reference)
-14. [Smart Routing Logic](#smart-routing-logic)
-15. [Datasets](#datasets)
-16. [Docker](#docker)
-17. [Contributing](#contributing)
+2. [Quick Start](#quick-start)
+3. [How it Works](#how-it-works)
+4. [Architecture](#architecture)
+5. [Project Structure](#project-structure)
+6. [Prerequisites](#prerequisites)
+7. [Installation & Setup](#installation--setup)
+8. [Verify Your Installation](#verify-your-installation)
+9. [Dataset Preprocessing](#dataset-preprocessing)
+10. [Research Pipeline — Detailed Guide](#research-pipeline--detailed-guide)
+11. [API Usage Examples](#api-usage-examples)
+12. [Google Colab](#google-colab)
+13. [Experiment Outputs](#experiment-outputs)
+14. [MLflow Tracking](#mlflow-tracking)
+15. [Chrome Extension](#chrome-extension)
+16. [Models & Embeddings Reference](#models--embeddings-reference)
+17. [Smart Routing Logic](#smart-routing-logic)
+18. [Datasets](#datasets)
+19. [Docker](#docker)
+20. [Troubleshooting & FAQ](#troubleshooting--faq)
+21. [Additional Resources](#additional-resources)
+22. [Contributing](#contributing)
 
 ---
 
@@ -34,6 +39,56 @@ The project has two main components:
 |---|---|
 | **Research framework** | Hydra/Optuna training pipeline, web scraping, web testing, and result tracking |
 | **Chrome extension** | Browser popup that sends selected text to the FastAPI backend and displays a real/fake verdict |
+
+---
+
+## Quick Start
+
+### 1. API Only (Minimum setup)
+```bash
+# Clone and setup
+git clone https://github.com/wgrzesik/fake-news-detector.git
+cd fake-news-detector
+python -m venv .venv
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+pip install -r requirements.txt
+
+# Start the API
+python backend/api.py
+
+# Test with curl
+curl -X POST http://127.0.0.1:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Breaking news: Scientists discover new evidence"}'
+```
+
+### 2. Full Research Pipeline
+```bash
+# After installation, preprocess datasets (first time only)
+python -m research.preprocess_datasets
+
+# Run training & evaluation
+python -m research.train_models
+python -m research.web.collect_web
+python -m research.evaluate_web
+python -m research.analyze_results
+
+# View results in MLflow UI
+mlflow ui --backend-store-uri sqlite:///mlflow.db
+# Open http://localhost:5000
+```
+
+### 3. Chrome Extension
+```bash
+# Start API first (see step 1)
+python backend/api.py
+
+# Then load extension in Chrome:
+# 1. Open chrome://extensions/
+# 2. Enable "Developer mode"
+# 3. Click "Load unpacked" → select the extension/ folder
+# 4. Navigate to any news site and test!
+```
 
 ---
 
@@ -169,9 +224,19 @@ fake-news-detector/
 
 ## Prerequisites
 
-- Python **3.9+**
-- `pip`
-- Google Chrome (for the extension)
+- **Python 3.9+** (recommended: 3.10 or 3.11 for best compatibility)
+- `pip` or `conda` package manager
+- **For API only**: ~2 GB RAM, ~5 GB disk space
+- **For training**:
+  - CPU: 8+ GB RAM, 50+ GB disk (multiple datasets)
+  - GPU (recommended): NVIDIA CUDA 11.8+ / 12.1+ with cuDNN (for transformer models)
+- Google Chrome (for the Chrome extension)
+- Git
+
+### Optional but recommended
+
+- **NVIDIA GPU**: Dramatically speeds up transformer and deep learning model training (50x+ faster)
+- **Google Colab**: Free GPU access for training on large datasets (see [Google Colab](#google-colab) section)
 
 ---
 
@@ -204,22 +269,52 @@ fake-news-detector/
    | LIAR | [https://www.cs.ucsb.edu/~william/data/liar_dataset.zip](https://www.cs.ucsb.edu/~william/data/liar_dataset.zip) | `research/LIAR/` |
    | WELFake | [https://zenodo.org/record/4561253](https://zenodo.org/record/4561253) | `research/WELFake/` |
 
-5. **Preprocess datasets** (see [Dataset Preprocessing](#dataset-preprocessing) section below)
+5. **Preprocess datasets** 
 
-   Or manually place pre-split datasets:
+   After downloading raw datasets (step 4), preprocess them into train/test/val splits:
 
-   | Dataset | Expected paths |
-   |---|---|
-   | ISOT | `research/configs/datasets/processed/isot/train.csv`, `test.csv`, `val.csv` |
-   | LIAR | `research/configs/datasets/processed/liar/train.csv`, `test.csv`, `val.csv` |
-   | WELFake | `research/configs/datasets/processed/welfake/train.csv`, `test.csv`, `val.csv` |
+   ```bash
+   python -m research.preprocess_datasets
+   ```
 
-   Each CSV must have at least two columns: `text` and `label` (0 = fake, 1 = real).
+   This creates processed datasets at:
+   - `research/configs/datasets/processed/isot/` (train.csv, test.csv, val.csv)
+   - `research/configs/datasets/processed/liar/` (train.csv, test.csv, val.csv)
+   - `research/configs/datasets/processed/welfake/` (train.csv, test.csv, val.csv)
+
+   See [Dataset Preprocessing](#dataset-preprocessing) section for full details on what this script does for each dataset.
 
 
 ---
 
-## Dataset Preprocessing
+## Verify Your Installation
+
+Before running experiments or the API, verify that your environment is set up correctly:
+
+```bash
+# Check Python version (should be 3.9+)
+python --version
+
+# Test imports
+python -c "import torch, transformers, sklearn, hydra; print('✓ All dependencies installed')"
+
+# Test API startup (Ctrl+C to stop)
+python backend/api.py
+# You should see:
+# INFO:     Uvicorn running on http://127.0.0.1:8000
+# [INFO] Models loaded successfully...
+
+# In another terminal, test API
+curl http://127.0.0.1:8000/docs
+# Opens API documentation at http://localhost:8000/docs
+```
+
+If any step fails:
+- **Missing dependency**: Run `pip install -r requirements.txt` again
+- **API won't start**: Check if port 8000 is already in use (`lsof -i :8000` on Mac/Linux)
+- **Models not found**: Ensure `saved_models/` directory contains pre-trained models (download from releases or train first)
+
+---
 
 The `research/preprocess_datasets.py` script automates the preparation of raw datasets into train/test/val splits suitable for the training pipeline.
 
@@ -248,6 +343,7 @@ research/
 └── WELFake/
     └── data.csv
 ```
+
 ### Running the preprocessor
 
 ```bash
@@ -276,12 +372,12 @@ research/configs/datasets/processed/
 
 Each file contains:
 - `text` — News article or claim text
-- `label` — Binary label (1 = fake, 0 = real)
+- `label` — Binary label (0 = fake, 1 = real)
 
 ### Dataset-specific processing
 
 #### ISOT
-- Combines `True.csv` and `Fake.csv` (True → label 0, Fake → label 1)
+- Combines `True.csv` and `Fake.csv` (True articles → label 1, Fake articles → label 0)
 - Stratified 80/10/10 split
 - Additional cleaning via `clean_isot.py` removes Reuters articles that appear in both subsets
 
@@ -315,19 +411,11 @@ All done!
 
 ---
 
-## Research Pipeline — Quick Start
+## Research Pipeline — Detailed Guide
 
-### Step 0: Preprocess datasets (first time only)
+All preprocessing must be completed first (see [Dataset Preprocessing](#dataset-preprocessing) section). Then proceed with the training pipeline:
 
-If you haven't already, preprocess your raw datasets into train/test/val splits:
-
-```bash
-python research/preprocess_datasets.py
-```
-
-See [Dataset Preprocessing](#dataset-preprocessing) for detailed instructions.
-
-### Hydra/Optuna pipeline (`research/train_models.py`)
+### Step 1: Hydra/Optuna pipeline (`research/train_models.py`)
 
 Runs Optuna hyperparameter search for every dataset × model × embedding combination and tracks results with MLflow:
 
@@ -348,7 +436,7 @@ Key configuration options are in `research/configs/config.yaml`:
 
 Results are saved to `experiments/metrics/training_results.csv`.
 
-### Collect web data (`research/web/collect_web.py`)
+### Step 2: Collect web data (`research/web/collect_web.py`)
 
 Scrapes real news articles from the web:
 
@@ -358,7 +446,7 @@ python -m research.web.collect_web
 
 Scraped data is saved to the directory configured in `config.yaml` under `web_scraping.output_dir`.
 
-### Evaluate on web data (`research/evaluate_web.py`)
+### Step 3: Evaluate on web data (`research/evaluate_web.py`)
 
 Tests all saved models against web-scraped data:
 
@@ -385,7 +473,7 @@ Configuration is managed via Hydra overrides on `research/configs/config.yaml`:
 | `embeddings_to_use` | all 4 | Filter by embedding name(s) |
 | `web_testing.results_dir` | `./experiments/web_test_results` | Where to write result CSVs |
 
-### Analyse results (`research/analyze_results.py`)
+### Step 4: Analyse results (`research/analyze_results.py`)
 
 Compares training results with web evaluation results, generates per-dataset and global rankings, delta metrics and visualisations:
 
@@ -398,6 +486,73 @@ python -m research.analyze_results
 | Per-dataset ranking & charts | `experiments/results/{dataset}/` |
 | Global ranking & charts | `experiments/results/all/` |
 | Cross-comparison summary | `experiments/results/{dataset}/summary.csv` |
+
+---
+
+## API Usage Examples
+
+### Starting the API
+
+```bash
+python backend/api.py
+```
+
+The server will start on `http://127.0.0.1:8000`. The API loads three pre-trained models at startup.
+
+### Python Client
+
+```python
+import requests
+
+url = "http://127.0.0.1:8000/predict"
+text = "Breaking news about world events"
+
+response = requests.post(url, json={"text": text})
+result = response.json()
+
+print(f"Prediction: {result['label']}")           # 'REAL' or 'FAKE'
+print(f"Confidence: {result['score']:.2%}")      # 0.00 - 1.00
+print(f"Model used: {result['metadata']['model_used']}")
+print(f"Word count: {result['metadata']['word_count']}")
+```
+
+### cURL
+
+```bash
+# Short text (< 30 words) - uses LIAR model
+curl -X POST http://127.0.0.1:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"text": "The moon is made of green cheese."}'
+
+# Medium text (30-100 words)
+curl -X POST http://127.0.0.1:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Scientists have discovered a new species in the Amazon rainforest. The species, which belongs to the family of tree frogs, exhibits unique coloration patterns."}'
+
+# Long article (> 100 words)
+curl -X POST http://127.0.0.1:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Full article text here... (100+ words)"}'
+```
+
+### Response Format
+
+```json
+{
+  "label": "REAL",
+  "score": 0.92,
+  "metadata": {
+    "model_used": "long_article",
+    "word_count": 250,
+    "preprocessing_type": "classic",
+    "embedding_type": "tfidf"
+  }
+}
+```
+
+### Interactive Documentation
+
+Visit `http://127.0.0.1:8000/docs` (Swagger UI) or `http://127.0.0.1:8000/redoc` (ReDoc) to explore the API interactively.
 
 ---
 
@@ -648,6 +803,169 @@ docker-compose up --build api     # rebuild + start in one step
 ```bash
 docker-compose down
 ```
+
+---
+
+## Troubleshooting & FAQ
+
+### Installation Issues
+
+**Q: `pip install -r requirements.txt` fails with dependency conflicts**
+
+A: Try installing in a fresh virtual environment:
+```bash
+python -m venv .venv --clear
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+pip install --upgrade pip setuptools wheel
+pip install -r requirements.txt
+```
+
+**Q: PyTorch installation is very slow or fails**
+
+A: PyTorch downloads large binaries. If you already have CUDA installed, specify your setup:
+```bash
+# For CPU only
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# For CUDA 12.1
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+```
+
+---
+
+### API Issues
+
+**Q: `Address already in use` error when starting API**
+
+A: Port 8000 is occupied. Either:
+- Find and stop the process: `lsof -i :8000` (Mac/Linux) or check Task Manager (Windows)
+- Run on a different port: `uvicorn backend.api:app --port 8001`
+
+**Q: API starts but returns 500 errors**
+
+A: Check if models are missing:
+```bash
+ls saved_models/
+# Should contain: isot/, liar/, welfake/
+```
+If empty, train models first or download pre-trained models from releases.
+
+**Q: Chrome extension can't reach API**
+
+A: Ensure:
+- API is running: `python backend/api.py`
+- API is on `http://127.0.0.1:8000` (not `localhost`)
+- Check browser console (F12 → Console tab) for CORS errors
+- If CORS error: Restart API or check network settings
+
+---
+
+### Training Pipeline Issues
+
+**Q: `preprocess_datasets.py` says "No such file or directory"**
+
+A: Raw datasets must be in `research/` folder:
+```
+research/
+├── ISOT/
+│   ├── True.csv
+│   └── Fake.csv
+├── LIAR/
+│   ├── train.tsv
+│   ├── test.tsv
+│   └── valid.tsv
+└── WELFake/
+    └── data.csv
+```
+Download from links in [Datasets](#datasets) section.
+
+**Q: Training is very slow**
+
+A: This is normal depending on your hardware:
+- **CPU only**: 1-2 hours per dataset with 8 models
+- **GPU (CUDA)**: 20-30 minutes per dataset
+- **Deep learning/Transformers**: Much slower; use Google Colab (free GPU)
+
+**Q: Out of memory error during training**
+
+A: Enable gradient accumulation or reduce batch size in `research/configs/config.yaml`:
+```yaml
+training:
+  batch_size: 16  # reduce from default
+  gradient_accumulation_steps: 2
+```
+
+---
+
+### Label Confusion
+
+**Q: What do label 0 and 1 mean?**
+
+A: **Consistent across the entire project:**
+- `0` = **FAKE** news
+- `1` = **REAL** news
+
+This applies to all datasets (ISOT, LIAR, WELFake) after preprocessing.
+
+---
+
+### Results & Evaluation
+
+**Q: How do I interpret F1 scores?**
+
+A:
+- F1 = harmonic mean of precision and recall
+- Range: 0.0 (worst) to 1.0 (perfect)
+- **0.7+**: Good model, reliable
+- **0.6-0.7**: Acceptable, but with trade-offs
+- **<0.6**: Poor, needs improvement or retraining
+
+**Q: Why does cross-dataset evaluation show lower scores?**
+
+A: This is **generalization gap** — models trained on one dataset perform worse on unseen datasets. It's normal and expected in ML.
+
+See `README_GENERALIZATION.md` and `CROSS_DATASET_ANALYSIS.md` for detailed analysis.
+
+---
+
+### Colab-Specific
+
+**Q: How do I upload datasets to Google Drive?**
+
+A:
+1. Create folder: `My Drive/fake-news-results/datasets/`
+2. Upload processed datasets (or raw for preprocessing)
+3. Set paths in `colab_secrets.json`
+
+**Q: Colab session disconnected, can I resume?**
+
+A: Yes! All data is saved to Drive. Just re-run the setup cells (0-4) and it will auto-sync.
+
+---
+
+## Additional Resources
+
+- **Project Documentation**
+  - [README_GENERALIZATION.md](README_GENERALIZATION.md) — Cross-dataset generalization analysis
+  - [CROSS_DATASET_ANALYSIS.md](CROSS_DATASET_ANALYSIS.md) — Detailed cross-dataset benchmarks
+  - [GENERALIZATION_SUMMARY.md](GENERALIZATION_SUMMARY.md) — Summary insights
+
+- **Key Papers & References**
+  - [ISOT Dataset](https://www.uvic.ca/engineering/ece/isot/datasets/)
+  - [LIAR Dataset](https://www.cs.ucsb.edu/~william/data/liar_dataset.zip)
+  - [WELFake Dataset](https://zenodo.org/record/4561253)
+  - [Optuna Documentation](https://optuna.org/)
+  - [MLflow Documentation](https://mlflow.org/)
+
+- **Tools & Libraries**
+  - [Hydra Configuration](https://hydra.cc/)
+  - [FastAPI](https://fastapi.tiangolo.com/)
+  - [Scikit-learn](https://scikit-learn.org/)
+  - [HuggingFace Transformers](https://huggingface.co/transformers/)
+  - [PyTorch](https://pytorch.org/)
+
+- **Similar Projects**
+  - Check GitHub discussions or issues for community contributions
 
 ---
 
