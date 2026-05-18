@@ -16,17 +16,16 @@ A comprehensive machine learning project for detecting fake news using various N
 8. [Verify Your Installation](#verify-your-installation)
 9. [Dataset Preprocessing](#dataset-preprocessing)
 10. [Research Pipeline — Detailed Guide](#research-pipeline--detailed-guide)
-11. [API Usage Examples](#api-usage-examples)
+11. [API & Chrome Extension](#api--chrome-extension)
 12. [Google Colab](#google-colab)
 13. [Experiment Outputs](#experiment-outputs)
 14. [MLflow Tracking](#mlflow-tracking)
-15. [Chrome Extension](#chrome-extension)
-16. [Models & Embeddings Reference](#models--embeddings-reference)
-17. [Smart Routing Logic](#smart-routing-logic)
-18. [Datasets](#datasets)
-19. [Docker](#docker)
-20. [Additional Resources](#additional-resources)
-21. [Contributing](#contributing)
+15. [Models & Embeddings Reference](#models--embeddings-reference)
+16. [Smart Routing Logic](#smart-routing-logic)
+17. [Datasets](#datasets)
+18. [Docker](#docker)
+19. [Additional Resources](#additional-resources)
+20. [Contributing](#contributing)
 
 ---
 
@@ -43,7 +42,7 @@ The project has two main components:
 
 ## Quick Start
 
-### 1. API Only (Minimum setup)
+### 1. Setup the environment
 ```bash
 # Clone and setup
 git clone https://github.com/wgrzesik/fake-news-detector.git
@@ -51,14 +50,6 @@ cd fake-news-detector
 python -m venv .venv
 source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
-
-# Start the API
-python backend/api.py
-
-# Test with curl
-curl -X POST http://127.0.0.1:8000/predict \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Breaking news: Scientists discover new evidence"}'
 ```
 
 ### 2. Full Research Pipeline
@@ -77,16 +68,16 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db
 # Open http://localhost:5000
 ```
 
-### 3. Chrome Extension
+### 3. Chrome Extension & API
+
+For detailed setup instructions, see [API & Chrome Extension](#api--chrome-extension) section.
+
+Quick version:
 ```bash
-# Start API first (see step 1)
+# Start API
 python backend/api.py
 
-# Then load extension in Chrome:
-# 1. Open chrome://extensions/
-# 2. Enable "Developer mode"
-# 3. Click "Load unpacked" → select the extension/ folder
-# 4. Navigate to any news site and test!
+# Then load extension in Chrome (see detailed section for steps)
 ```
 
 ---
@@ -283,7 +274,6 @@ fake-news-detector/
 
    See [Dataset Preprocessing](#dataset-preprocessing) section for full details on what this script does for each dataset.
 
-
 ---
 
 ## Verify Your Installation
@@ -296,22 +286,9 @@ python --version
 
 # Test imports
 python -c "import torch, transformers, sklearn, hydra; print('✓ All dependencies installed')"
-
-# Test API startup (Ctrl+C to stop)
-python backend/api.py
-# You should see:
-# INFO:     Uvicorn running on http://127.0.0.1:8000
-# [INFO] Models loaded successfully...
-
-# In another terminal, test API
-curl http://127.0.0.1:8000/docs
-# Opens API documentation at http://localhost:8000/docs
 ```
 
-If any step fails:
-- **Missing dependency**: Run `pip install -r requirements.txt` again
-- **API won't start**: Check if port 8000 is already in use (`lsof -i :8000` on Mac/Linux)
-- **Models not found**: Ensure `saved_models/` directory contains pre-trained models (download from releases or train first)
+If dependencies fail, run `pip install -r requirements.txt` again.
 
 ---
 
@@ -378,7 +355,7 @@ Each file contains:
 #### ISOT
 - Combines `True.csv` and `Fake.csv` (True articles → label 1, Fake articles → label 0)
 - Stratified 80/10/10 split
-- Additional cleaning via `clean_isot.py` removes Reuters articles that appear in both subsets
+- Additional cleaning: removing Reuters articles that appear in both subsets
 
 #### LIAR
 - TSV format with predefined train/test/valid splits (original split structure is preserved)
@@ -389,24 +366,6 @@ Each file contains:
 - Combines four external datasets for diversity
 - Stratified 80/10/10 split
 - Already contains `text` and `label` columns; no additional mapping needed
-
-### Example output
-
-```
-ISOT
-  train.csv: 28800 rows
-  test.csv: 3600 rows
-  val.csv: 3600 rows
-LIAR
-  train.csv: 8555 rows
-  test.csv: 2703 rows
-  val.csv: 1255 rows
-WELFake
-  train.csv: 57600 rows
-  test.csv: 7200 rows
-  val.csv: 7200 rows
-All done!
-```
 
 ---
 
@@ -488,70 +447,59 @@ python -m research.analyze_results
 
 ---
 
-## API Usage Examples
+## API & Chrome Extension
 
-### Starting the API
+### Starting the API server
 
 ```bash
 python backend/api.py
 ```
 
-The server will start on `http://127.0.0.1:8000`. The API loads three pre-trained models at startup.
+The server will start on `http://127.0.0.1:8000` and load three pre-trained models on startup.
 
-### Python Client
-
-```python
-import requests
-
-url = "http://127.0.0.1:8000/predict"
-text = "Breaking news about world events"
-
-response = requests.post(url, json={"text": text})
-result = response.json()
-
-print(f"Prediction: {result['label']}")           # 'REAL' or 'FAKE'
-print(f"Confidence: {result['score']:.2%}")      # 0.00 - 1.00
-print(f"Model used: {result['metadata']['model_used']}")
-print(f"Word count: {result['metadata']['word_count']}")
-```
-
-### cURL
+### Testing the API
 
 ```bash
-# Short text (< 30 words) - uses LIAR model
+# In a browser or terminal:
 curl -X POST http://127.0.0.1:8000/predict \
   -H "Content-Type: application/json" \
-  -d '{"text": "The moon is made of green cheese."}'
-
-# Medium text (30-100 words)
-curl -X POST http://127.0.0.1:8000/predict \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Scientists have discovered a new species in the Amazon rainforest. The species, which belongs to the family of tree frogs, exhibits unique coloration patterns."}'
-
-# Long article (> 100 words)
-curl -X POST http://127.0.0.1:8000/predict \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Full article text here... (100+ words)"}'
+  -d '{"text": "Your news text here"}'
 ```
 
-### Response Format
+For interactive documentation, visit:
+- **Swagger UI**: `http://127.0.0.1:8000/docs`
+- **ReDoc**: `http://127.0.0.1:8000/redoc`
+
+### Loading the Chrome Extension
+
+1. Open Chrome and go to `chrome://extensions/`
+2. Enable **Developer mode** (top-right toggle)
+3. Click **Load unpacked**
+4. Select the `extension/` folder from this project
+
+### Using the extension
+
+1. Navigate to any news website
+2. Select (highlight) a paragraph or headline
+3. Click the **Fake News Detector** icon in the Chrome toolbar
+4. Click **ANALYZE SELECTION**
+5. View the verdict (REAL/FAKE) with confidence score
+
+---
+
+## API Response Format
 
 ```json
 {
   "label": "REAL",
   "score": 0.92,
-  "metadata": {
-    "model_used": "long_article",
-    "word_count": 250,
-    "preprocessing_type": "classic",
-    "embedding_type": "tfidf"
+  "meta": {
+    "used_dataset": "ISOT",
+    "used_model": "rf",
+    "word_count": 250
   }
 }
 ```
-
-### Interactive Documentation
-
-Visit `http://127.0.0.1:8000/docs` (Swagger UI) or `http://127.0.0.1:8000/redoc` (ReDoc) to explore the API interactively.
 
 ---
 
@@ -641,31 +589,6 @@ The UI shows per-run metrics, hyperparameters, tags, and a comparison view acros
 
 ---
 
-## Chrome Extension
-
-### 1. Start the backend API
-
-```bash
-python backend/api.py
-```
-
-The server starts on `http://127.0.0.1:8000`. It loads three pre-trained models on startup.
-
-### 2. Load the extension in Chrome
-
-1. Open Chrome and go to `chrome://extensions/`
-2. Enable **Developer mode** (top-right toggle)
-3. Click **Load unpacked**
-4. Select the `extension/` folder from this project
-
-### 3. Usage
-
-1. Navigate to any news website
-2. Select (highlight) a paragraph or headline
-3. Click the **Fake News Detector** icon in the Chrome toolbar
-4. Click **ANALYZE SELECTION**
-
----
 
 ## Models & Embeddings Reference
 
@@ -724,23 +647,13 @@ Not all model × embedding combinations are valid. The `ModelFactory` validates 
 
 The API selects the best available model based on the word count of the input text:
 
-| Word count | Model used |
-|---|---|
-| < 30 words | `short_text` model (LR on LIAR — optimised for short claims) |
-| > 100 words | `long_article` model (SVM on ISOT — optimised for full articles) |
-| 30–100 words | `general` model (XGBoost on WELFake — general purpose) |
+| Word count | Model name | Dataset | Classifier | Embedding |
+|---|---|---|---|---|
+| < 30 words | `short_text` | ISOT | Random Forest | Bag of Words |
+| > 100 words | `long_article` | LIAR | BiLSTM | GloVe |
+| 30–100 words | `general` | ISOT | RoBERTa | RoBERTa-base |
 
 If the preferred model is not loaded, the API falls back to `general` or the first available model.
-
----
-
-## Datasets
-
-| Dataset | Description | Download |
-|---|---|---|
-| **ISOT** | ~44 000 real and fake news articles from Reuters (real) and various unreliable sites (fake) | [UVic ISOT](https://www.uvic.ca/engineering/ece/isot/datasets/) |
-| **LIAR** | ~12 800 short political statements labelled by PolitiFact into 6 truthfulness categories (binarised for this project) | [UCSB LIAR](https://www.cs.ucsb.edu/~william/data/liar_dataset.zip) |
-| **WELFake** | ~72 000 news articles combining four existing datasets for improved diversity | [Zenodo WELFake](https://zenodo.org/record/4561253) |
 
 ---
 
