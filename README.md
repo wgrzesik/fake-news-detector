@@ -721,11 +721,6 @@ docker-compose down
 
 ## Additional Resources
 
-- **Project Documentation**
-  - [README_GENERALIZATION.md](README_GENERALIZATION.md) — Cross-dataset generalization analysis
-  - [CROSS_DATASET_ANALYSIS.md](CROSS_DATASET_ANALYSIS.md) — Detailed cross-dataset benchmarks
-  - [GENERALIZATION_SUMMARY.md](GENERALIZATION_SUMMARY.md) — Summary insights
-
 - **Key Papers & References**
   - [ISOT Dataset](https://www.uvic.ca/engineering/ece/isot/datasets/)
   - [LIAR Dataset](https://www.cs.ucsb.edu/~william/data/liar_dataset.zip)
@@ -739,9 +734,6 @@ docker-compose down
   - [Scikit-learn](https://scikit-learn.org/)
   - [HuggingFace Transformers](https://huggingface.co/transformers/)
   - [PyTorch](https://pytorch.org/)
-
-- **Similar Projects**
-  - Check GitHub discussions or issues for community contributions
 
 ---
 
