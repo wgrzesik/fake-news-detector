@@ -9,6 +9,7 @@ class ModelFactory:
     """Factory for creating model instances with embedding compatibility validation."""
 
     MODEL_REGISTRY = {
+        # ML models
         'svm': SVMModel,
         'lr': LogisticRegressionModel,
         'nb': NaiveBayesModel,
@@ -17,10 +18,13 @@ class ModelFactory:
         'rf': RandomForestModel,
         'dt': DecisionTreeModel,
         'xgb': XGBoostModel,
+
+        # Transformer models
         'bert': BertModel,
         'roberta': RobertaModel,
         'fakebert': FakeBertModel,
         'distilbert': DistilBertModel,
+        
         # Deep Learning sequence models
         'lstm': LSTMModel,
         'gru': GRUModel,

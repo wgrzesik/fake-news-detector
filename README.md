@@ -12,16 +12,17 @@ A comprehensive machine learning project for detecting fake news using various N
 4. [Project Structure](#project-structure)
 5. [Prerequisites](#prerequisites)
 6. [Installation & Setup](#installation--setup)
-7. [Research Pipeline — Quick Start](#research-pipeline--quick-start)
-8. [Google Colab](#google-colab)
-9. [Experiment Outputs](#experiment-outputs)
-10. [MLflow Tracking](#mlflow-tracking)
-11. [Chrome Extension](#chrome-extension)
-12. [Models & Embeddings Reference](#models--embeddings-reference)
-13. [Smart Routing Logic](#smart-routing-logic)
-14. [Datasets](#datasets)
-15. [Docker](#docker)
-16. [Contributing](#contributing)
+7. [Dataset Preprocessing](#dataset-preprocessing)
+8. [Research Pipeline — Quick Start](#research-pipeline--quick-start)
+9. [Google Colab](#google-colab)
+10. [Experiment Outputs](#experiment-outputs)
+11. [MLflow Tracking](#mlflow-tracking)
+12. [Chrome Extension](#chrome-extension)
+13. [Models & Embeddings Reference](#models--embeddings-reference)
+14. [Smart Routing Logic](#smart-routing-logic)
+15. [Datasets](#datasets)
+16. [Docker](#docker)
+17. [Contributing](#contributing)
 
 ---
 
@@ -40,25 +41,32 @@ The project has two main components:
 
 ### Research pipeline
 
-1. **Dataset loading** — Three labelled news datasets (ISOT, LIAR, WELFake) are read from pre-split `train.csv` / `test.csv` files. Each row contains a `text` column and a binary `label` (0 = fake, 1 = real).
+1. **Dataset preprocessing** — Raw datasets (ISOT, LIAR, WELFake) are processed into train/test/val splits using `research/preprocess_datasets.py`. This script:
+   - Loads raw dataset files (CSV/TSV format)
+   - Binarises labels according to dataset-specific schemes (e.g., LIAR's 6-point scale → 0/1)
+   - Shuffles and stratifies splits into 80% train / 10% test / 10% validation
+   - Saves clean CSV files with `text` and `label` columns to `research/configs/datasets/processed/`
+   - Optionally cleans ISOT to remove Reuters leakage (via `clean_isot.py`)
 
-2. **Preprocessing** — `TextPreprocessor` applies one of two strategies selected automatically from `ModelFactory.PREPROCESSING_MAP`:
+2. **Dataset loading** — Three labelled news datasets (ISOT, LIAR, WELFake) are read from pre-split `train.csv` / `test.csv` / `val.csv` files. Each row contains a `text` column and a binary `label` (0 = fake, 1 = real).
+
+3. **Preprocessing** — `TextPreprocessor` applies one of two strategies selected automatically from `ModelFactory.PREPROCESSING_MAP`:
    - `classic` — lowercase, strip URLs/HTML, remove punctuation and digits, collapse whitespace. Used for all classical ML and deep learning models.
    - `bert` — whitespace normalisation only. Used for HuggingFace transformer models to preserve casing and subword boundaries.
 
-3. **Embedding** — For classical ML and deep learning models the preprocessed text is converted to dense vectors:
+4. **Embedding** — For classical ML and deep learning models the preprocessed text is converted to dense vectors:
    - `tfidf` / `bow` — sparse count-based representations fit on the training split.
    - `word2vec` / `glove` — each document is represented as the average of its token embeddings.
    - Transformer and DL models tokenise text internally; no external embedder step is needed.
 
-4. **Hyperparameter optimisation** — [Optuna](https://optuna.org/) runs `n_trials` experiments per model × embedding × dataset combination. A `TPESampler` proposes candidates and a `MedianPruner` kills unpromising transformer trials early. The best trial's hyperparameters are used to retrain the final model.
+5. **Hyperparameter optimisation** — [Optuna](https://optuna.org/) runs `n_trials` experiments per model × embedding × dataset combination. A `TPESampler` proposes candidates and a `MedianPruner` kills unpromising transformer trials early. The best trial's hyperparameters are used to retrain the final model.
 
-5. **Tracking** — `HybridTrackingManager` writes results simultaneously to:
+6. **Tracking** — `HybridTrackingManager` writes results simultaneously to:
    - A local `experiments/metrics/training_results.csv` (durable, Drive-backed in Colab).
    - An MLflow SQLite database for UI-based comparison across runs.
    - Per-experiment JSON (best hyperparameters), CSV (trial history), and prediction files.
 
-6. **Serialisation** — The final model (`classifier.joblib`), embedder (`embedder.pkl`), and optional scaler (`scaler.joblib`) are saved to `saved_models/{dataset}/{model_name}/`.
+7. **Serialisation** — The final model (`classifier.joblib`), embedder (`embedder.pkl`), and optional scaler (`scaler.joblib`) are saved to `saved_models/{dataset}/{model_name}/`.
 
 ### API prediction
 
@@ -78,22 +86,26 @@ The project has two main components:
 ## Architecture
 
 ```
-Web scraping (collect_web.py)
+Raw Datasets (ISOT, LIAR, WELFake)
         │
         ▼
-  Raw text data
+Dataset Preprocessing (preprocess_datasets.py)
+ (split into train/test/val)
         │
         ▼
-Preprocessing (TextPreprocessor)
+Dataset loading (train.csv / test.csv / val.csv)
         │
         ▼
-Embedding (TF-IDF / BoW / Word2Vec / GloVe)
+Text Preprocessing (TextPreprocessor)
+        │
+        ▼
+Embedding (TF-IDF / BoW / Word2Vec / GloVe / Transformers)
         │
         ▼
 Model training & Optuna optimisation (train_models.py)
         │
         ▼
-Evaluation & result tracking (tracking_manager.py)
+Evaluation & result tracking (tracking_manager.py, evaluate_web.py)
         │
         ▼
  saved_models/   ←→   FastAPI backend (api.py)
@@ -116,30 +128,41 @@ fake-news-detector/
 │   ├── popup.js
 │   └── styles.css
 ├── research/
+│   ├── preprocess_datasets.py        # Dataset preprocessing (train/test/val splits)
+│   ├── train_models.py               # Hydra/Optuna training pipeline (main entry point)
+│   ├── evaluate_web.py               # CLI: test trained models on web-scraped data
+│   ├── analyze_results.py            # Analysis & visualisation of training vs web results
+│   ├── clean_isot.py                 # ISOT Reuters leakage removal
 │   ├── configs/
 │   │   ├── config.yaml               # Hydra config (datasets, models, embeddings, Optuna, MLflow)
 │   │   ├── embeddings/               # Embedding implementations (TF-IDF, BoW, Word2Vec, GloVe)
 │   │   ├── models/                   # Model wrappers & factory (SVM, LR, RF, XGB, …)
-│   │   └── preprocessing/            # Text preprocessing (TextPreprocessor)
+│   │   ├── preprocessing/            # Text preprocessing (TextPreprocessor)
+│   │   └── datasets/processed/       # Preprocessed datasets (train/test/val splits)
 │   ├── tracking/
 │   │   └── tracking_manager.py       # Hybrid CSV + MLflow tracking manager
 │   ├── web/
 │   │   ├── collect_web.py            # CLI: collect/simulate web-scraped articles
 │   │   ├── web_scraper.py            # News source definitions & RSS collector
 │   │   └── evaluator.py              # WebTestEvaluator class
-│   ├── train_models.py               # Hydra/Optuna training pipeline (main entry point)
-│   ├── evaluate_web.py               # CLI: test trained models on web-scraped data
-│   └── analyze_results.py            # Analysis & visualisation of training vs web results
+│   ├── colab/                        # Google Colab integration
+│   │   ├── colab_config.py           # Colab-specific configuration
+│   │   └── colab_secrets.json        # Colab secrets (GitHub token, paths)
+│   └── data/                         # Raw datasets (gitignored)
 ├── experiments/                      # Generated output directory (gitignored data, skeleton tracked)
 │   ├── metrics/                      # training_results.csv from training pipeline
 │   ├── predictions/                  # Per-experiment prediction CSVs
 │   ├── web_test_results/             # Web testing CSVs and reports
 │   ├── hyperparams/                  # Best Optuna hyperparameters (JSON)
 │   ├── trial_history/                # Optuna trial history CSVs
-│   └── plots/                        # Visualisation outputs
+│   └── results/                      # Visualisation outputs
 ├── saved_models/                     # Serialised models (.joblib, .pkl) — gitignored
 ├── requirements.txt
-└── README.md
+├── README.md
+├── docker-compose.yml
+├── Dockerfile                        # API container
+├── Dockerfile.research               # Training/research container
+└── fake_news_detector.ipynb          # Google Colab notebook
 ```
 
 ---
@@ -167,30 +190,142 @@ fake-news-detector/
    ```
 
 3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-4. **Prepare datasets**
+4. **Download raw datasets** (optional)
 
-   Datasets are not included in the repository due to their size. Download them and place the processed splits under `research/configs/datasets/processed/`:
+   If you plan to preprocess datasets yourself, download them and place them in `research/` directory:
 
-   | Dataset | Expected path |
+   | Dataset | Download link | Expected location |
+   |---|---|---|
+   | ISOT | [https://www.uvic.ca/engineering/ece/isot/datasets/](https://www.uvic.ca/engineering/ece/isot/datasets/) | `research/ISOT/` |
+   | LIAR | [https://www.cs.ucsb.edu/~william/data/liar_dataset.zip](https://www.cs.ucsb.edu/~william/data/liar_dataset.zip) | `research/LIAR/` |
+   | WELFake | [https://zenodo.org/record/4561253](https://zenodo.org/record/4561253) | `research/WELFake/` |
+
+5. **Preprocess datasets** (see [Dataset Preprocessing](#dataset-preprocessing) section below)
+
+   Or manually place pre-split datasets:
+
+   | Dataset | Expected paths |
    |---|---|
-   | ISOT | `research/configs/datasets/processed/isot/train.csv`, `test.csv` |
-   | LIAR | `research/configs/datasets/processed/liar/train.csv`, `test.csv` |
-   | WELFake | `research/configs/datasets/processed/welfake/train.csv`, `test.csv` |
+   | ISOT | `research/configs/datasets/processed/isot/train.csv`, `test.csv`, `val.csv` |
+   | LIAR | `research/configs/datasets/processed/liar/train.csv`, `test.csv`, `val.csv` |
+   | WELFake | `research/configs/datasets/processed/welfake/train.csv`, `test.csv`, `val.csv` |
 
    Each CSV must have at least two columns: `text` and `label` (0 = fake, 1 = real).
 
-   Download links:
-   - **ISOT**: [https://www.uvic.ca/engineering/ece/isot/datasets/](https://www.uvic.ca/engineering/ece/isot/datasets/)
-   - **LIAR**: [https://www.cs.ucsb.edu/~william/data/liar_dataset.zip](https://www.cs.ucsb.edu/~william/data/liar_dataset.zip)
-   - **WELFake**: [https://zenodo.org/record/4561253](https://zenodo.org/record/4561253)
+
+---
+
+## Dataset Preprocessing
+
+The `research/preprocess_datasets.py` script automates the preparation of raw datasets into train/test/val splits suitable for the training pipeline.
+
+### Overview
+
+This script:
+- **Normalises labels** according to dataset-specific schemes (e.g., LIAR's 6-point Likert scale → binary 0/1)
+- **Splits data** into 80% training, 10% test, 10% validation using stratified sampling (preserves class balance)
+- **Validates quality** by removing rows with missing text fields
+- **Cleans ISOT** to remove Reuters leakage (articles present in both real and fake subsets)
+- **Saves normalised CSVs** with consistent `text` and `label` columns
+
+### Prerequisites
+
+All raw datasets must be placed in the `research/` directory before running preprocessing:
+
+```
+research/
+├── ISOT/
+│   ├── True.csv
+│   └── Fake.csv
+├── LIAR/
+│   ├── train.tsv
+│   ├── test.tsv
+│   └── valid.tsv
+└── WELFake/
+    └── data.csv
+```
+### Running the preprocessor
+
+```bash
+python -m research.preprocess_datasets
+```
+
+### Output
+
+Processed datasets are saved to `research/configs/datasets/processed/{dataset}/`:
+
+```
+research/configs/datasets/processed/
+├── isot/
+│   ├── train.csv
+│   ├── test.csv
+│   └── val.csv
+├── liar/
+│   ├── train.csv
+│   ├── test.csv
+│   └── val.csv
+└── welfake/
+    ├── train.csv
+    ├── test.csv
+    └── val.csv
+```
+
+Each file contains:
+- `text` — News article or claim text
+- `label` — Binary label (1 = fake, 0 = real)
+
+### Dataset-specific processing
+
+#### ISOT
+- Combines `True.csv` and `Fake.csv` (True → label 0, Fake → label 1)
+- Stratified 80/10/10 split
+- Additional cleaning via `clean_isot.py` removes Reuters articles that appear in both subsets
+
+#### LIAR
+- TSV format with predefined train/test/valid splits (original split structure is preserved)
+- Label mapping: `{pants-fire, false, barely-true}` → 1 (fake), `{half-true, mostly-true, true}` → 0 (real)
+- Removes statements not in the target label set
+
+#### WELFake
+- Combines four external datasets for diversity
+- Stratified 80/10/10 split
+- Already contains `text` and `label` columns; no additional mapping needed
+
+### Example output
+
+```
+ISOT
+  train.csv: 28800 rows
+  test.csv: 3600 rows
+  val.csv: 3600 rows
+LIAR
+  train.csv: 8555 rows
+  test.csv: 2703 rows
+  val.csv: 1255 rows
+WELFake
+  train.csv: 57600 rows
+  test.csv: 7200 rows
+  val.csv: 7200 rows
+All done!
+```
 
 ---
 
 ## Research Pipeline — Quick Start
+
+### Step 0: Preprocess datasets (first time only)
+
+If you haven't already, preprocess your raw datasets into train/test/val splits:
+
+```bash
+python research/preprocess_datasets.py
+```
+
+See [Dataset Preprocessing](#dataset-preprocessing) for detailed instructions.
 
 ### Hydra/Optuna pipeline (`research/train_models.py`)
 
@@ -290,10 +425,11 @@ The repository includes `fake_news_detector.ipynb` for running the full training
 | 2 — Clone / pull repo | Clones on first run; pulls latest changes on subsequent runs |
 | 3 — Symlink setup | Links Drive folders into the project via `colab_setup.py` |
 | 4 — Install deps | `pip install -r requirements.txt` |
-| 5 — Train models | `python -m research.train_models` (all Hydra overrides apply) |
-| 6 — Collect web data | `python -m research.web.collect_web` |
-| 7 — Evaluate on web | `python -m research.evaluate_web` |
-| 8 — Analyse results | `python -m research.analyze_results` |
+| 5 — Preprocess datasets | `python research/preprocess_datasets.py` (first time only) |
+| 6 — Train models | `python -m research.train_models` (all Hydra overrides apply) |
+| 7 — Collect web data | `python -m research.web.collect_web` |
+| 8 — Evaluate on web | `python -m research.evaluate_web` |
+| 9 — Analyse results | `python -m research.analyze_results` |
 
 All outputs (models, experiments, MLflow DB) are written back to Drive, so interrupted sessions resume from where they left off.
 
