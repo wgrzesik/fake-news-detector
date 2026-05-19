@@ -645,13 +645,13 @@ Not all model × embedding combinations are valid. The `ModelFactory` validates 
 
 ## Smart Routing Logic
 
-The API selects the best available model based on the word count of the input text:
+The API selects the best available model based on the word count of the input text. The routing rules are derived from the data-driven recommendation analysis (test set + web evaluation):
 
 | Word count | Model name | Dataset | Classifier | Embedding |
 |---|---|---|---|---|
-| < 30 words | `short_text` | ISOT | Random Forest | Bag of Words |
+| < 30 words | `short_text` | WELFake | XGBoost | TF-IDF |
+| 30–100 words | `general` | ISOT | Random Forest | Bag of Words |
 | > 100 words | `long_article` | LIAR | BiLSTM | GloVe |
-| 30–100 words | `general` | ISOT | RoBERTa | RoBERTa-base |
 
 If the preferred model is not loaded, the API falls back to `general` or the first available model.
 
