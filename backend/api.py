@@ -23,9 +23,9 @@ except ImportError as e:
 MODELS: Dict[str, Any] = {}
 
 _MODEL_CONFIGS = {
-    "short_text": {"dataset": "ISOT", "type": "rf", "emb": "bow"},
+    "short_text": {"dataset": "WELFake", "type": "xgb", "emb": "tfidf"},
     "long_article": {"dataset": "LIAR", "type": "bilstm", "emb": "glove"},
-    "general": {"dataset": "ISOT", "type": "roberta", "emb": "roberta-base"},
+    "general": {"dataset": "ISOT", "type": "rf", "emb": "bow"},
 }
 
 
