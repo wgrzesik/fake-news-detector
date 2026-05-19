@@ -1,0 +1,625 @@
+% =====================================================================
+% Rozdziały pracy magisterskiej -- prezentacja wyników eksperymentów
+%
+% Plik zawiera trzy sekcje przedstawiające wyniki badań nad detekcją
+% fałszywych informacji (fake news) z wykorzystaniem trzech rodzin
+% modeli: klasycznych modeli uczenia maszynowego, sieci głębokich oraz
+% modeli opartych na architekturze Transformer.
+%
+% Wyniki są oparte na czterech zbiorach wyników eksperymentów:
+%   * results_test.csv          -- ewaluacja na zbiorze testowym
+%                                  (split 10\% z każdego korpusu),
+%   * results_text_web.csv      -- ewaluacja na pełnych tekstach
+%                                  artykułów pozyskanych ze stron WWW,
+%   * results_title_web.csv     -- ewaluacja na samych tytułach
+%                                  artykułów ze stron WWW,
+%   * results_short_text_web.csv-- ewaluacja na krótkich fragmentach
+%                                  tekstu (lead/podsumowanie).
+%
+% Aby skompilować plik wymagane są pakiety:
+%   \usepackage[utf8]{inputenc}
+%   \usepackage[T1]{fontenc}
+%   \usepackage[polish]{babel}
+%   \usepackage{booktabs}
+%   \usepackage{array}
+%   \usepackage{multirow}
+%   \usepackage{caption}
+%   \usepackage{graphicx}
+% =====================================================================
+
+\section{Wyniki klasycznych modeli uczenia maszynowego}
+\label{sec:wyniki_klasyczne}
+
+W~niniejszym rozdziale przedstawione zostały wyniki eksperymentów
+przeprowadzonych przy użyciu ośmiu klasycznych algorytmów uczenia
+maszynowego: regresji logistycznej (\textit{lr}), maszyny wektorów
+nośnych (\textit{svm}), drzewa decyzyjnego (\textit{dt}), lasu
+losowego (\textit{rf}), gradient boostingu (\textit{xgb}), naiwnego
+klasyfikatora Bayesa w~wariantach Gaussa (\textit{nb}) i~wielomianowym
+(\textit{mnb}) oraz $k$-najbliższych sąsiadów (\textit{knn}). Każdy
+klasyfikator został przetestowany w~kombinacji z~czterema reprezentacjami
+tekstu: TF--IDF, bag-of-words (BoW), Word2Vec oraz GloVe. Niedozwolone
+kombinacje (np.\ wielomianowy Bayes z~uśrednionymi gęstymi wektorami)
+były automatycznie odrzucane przez fabrykę modeli, dlatego liczność
+eksperymentów dla każdego korpusu nie jest identyczna w~każdym wierszu.
+Hiperparametry zostały dobrane za pomocą biblioteki Optuna
+(samplerem był \textit{TPESampler}), a~ostateczne metryki uzyskano na
+niezależnym podzbiorze testowym (10\,\% każdego ze zbiorów: ISOT, LIAR
+oraz WELFake).
+
+\subsection{Wyniki na zbiorach testowych}
+\label{sec:wyniki_klasyczne_test}
+
+Tabela~\ref{tab:klas_isot} zawiera podsumowanie najważniejszych
+wyników klasycznych modeli na zbiorze ISOT. Wartości w~tabeli zostały
+posortowane malejąco względem miary $F_1$.
+
+\begin{table}[ht]
+\centering
+\caption{Wyniki klasycznych modeli uczenia maszynowego na zbiorze
+testowym ISOT (najlepsze osiem kombinacji wg miary $F_1$).}
+\label{tab:klas_isot}
+\begin{tabular}{llrrrrrr}
+\toprule
+Model & Embedding & Acc. & Prec. & Recall & $F_1$ & $t_{tr}$ [s] & $t_{inf}$ [s] \\
+\midrule
+xgb & tfidf    & 0,9977 & 0,9977 & 0,9977 & 0,9977 & 150,05 & 0,072 \\
+xgb & bow      & 0,9974 & 0,9975 & 0,9974 & 0,9974 & 12,14  & 0,063 \\
+lr  & tfidf    & 0,9921 & 0,9921 & 0,9921 & 0,9921 & 1,77   & 0,040 \\
+svm & tfidf    & 0,9905 & 0,9905 & 0,9905 & 0,9905 & 29,39  & 0,048 \\
+svm & word2vec & 0,9836 & 0,9836 & 0,9836 & 0,9836 & 6,60   & 0,023 \\
+lr  & word2vec & 0,9813 & 0,9813 & 0,9813 & 0,9813 & 3,30   & 0,016 \\
+rf  & tfidf    & 0,9739 & 0,9743 & 0,9739 & 0,9739 & 27,67  & 0,607 \\
+mnb & tfidf    & 0,9619 & 0,9619 & 0,9619 & 0,9619 & 0,12   & 0,034 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Na zbiorze ISOT klasyczne modele osiągnęły bardzo wysoką jakość
+klasyfikacji. Najlepszy wynik (\(F_1 = 0{,}9977\)) uzyskał XGBoost
+z~reprezentacją TF--IDF, jednak różnica między pierwszą a~ósmą pozycją
+rankingu wynosi niespełna 4 punkty procentowe. Warto zauważyć, że
+reprezentacje rzadkie (TF--IDF, BoW) wyraźnie dominują nad gęstymi
+uśrednionymi wektorami (Word2Vec, GloVe) -- pierwsze cztery miejsca
+zajmują wyłącznie modele oparte na TF--IDF lub BoW. Najsłabszy z~modeli,
+$k$-NN z~reprezentacją BoW, uzyskał jedynie \(F_1 = 0{,}6444\), co
+wynika z~problemu rzadkości i~wysokiej wymiarowości przestrzeni cech,
+w~której metryka odległości euklidesowej traci interpretowalność.
+
+Tabela~\ref{tab:klas_welfake} zawiera analogiczne wyniki dla korpusu
+WELFake.
+
+\begin{table}[ht]
+\centering
+\caption{Wyniki klasycznych modeli na zbiorze testowym WELFake
+(najlepsze osiem kombinacji wg miary $F_1$).}
+\label{tab:klas_welfake}
+\begin{tabular}{llrrrrrr}
+\toprule
+Model & Embedding & Acc. & Prec. & Recall & $F_1$ & $t_{tr}$ [s] & $t_{inf}$ [s] \\
+\midrule
+xgb & bow      & 0,9713 & 0,9715 & 0,9713 & 0,9713 & 56,17  & 0,173 \\
+xgb & tfidf    & 0,9711 & 0,9713 & 0,9711 & 0,9711 & 147,67 & 0,045 \\
+lr  & tfidf    & 0,9576 & 0,9576 & 0,9576 & 0,9576 & 8,14   & 0,072 \\
+svm & tfidf    & 0,9490 & 0,9490 & 0,9490 & 0,9489 & 58,60  & 0,085 \\
+dt  & bow      & 0,9362 & 0,9381 & 0,9362 & 0,9364 & 20,21  & 0,021 \\
+dt  & tfidf    & 0,9336 & 0,9349 & 0,9336 & 0,9337 & 57,23  & 0,029 \\
+svm & word2vec & 0,9194 & 0,9196 & 0,9194 & 0,9195 & 32,06  & 0,065 \\
+lr  & word2vec & 0,9165 & 0,9165 & 0,9165 & 0,9165 & 5,55   & 0,016 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Wyniki na korpusie WELFake są wyraźnie skromniejsze niż na ISOT, ale
+nadal pozwalają na uznanie problemu za rozwiązany w~stopniu bardzo
+dobrym. Najlepszą kombinacją okazał się XGBoost z~reprezentacją BoW
+(\(F_1 = 0{,}9713\)), co potwierdza dużą skuteczność metod opartych
+na drzewach decyzyjnych w~połączeniu z~rzadkimi reprezentacjami
+tekstu. Średnia miara $F_1$ dla wszystkich klasycznych modeli na tym
+zbiorze wyniosła \(0{,}883\), co świadczy o~większej trudności
+zadania -- WELFake jest zbiorem zagregowanym z~czterech źródeł
+i~zawiera bardziej zróżnicowane stylistycznie teksty.
+
+Najtrudniejszy okazał się zbiór LIAR, który zawiera krótkie wypowiedzi
+polityków sklasyfikowane na skali sześciostopniowej zbinaryzowanej do
+problemu dwuklasowego (Tabela~\ref{tab:klas_liar}).
+
+\begin{table}[ht]
+\centering
+\caption{Wyniki klasycznych modeli na zbiorze testowym LIAR
+(najlepsze osiem kombinacji wg miary $F_1$).}
+\label{tab:klas_liar}
+\begin{tabular}{llrrrrrr}
+\toprule
+Model & Embedding & Acc. & Prec. & Recall & $F_1$ & $t_{tr}$ [s] & $t_{inf}$ [s] \\
+\midrule
+mnb & bow      & 0,6335 & 0,6321 & 0,6335 & 0,6326 & 0,01  & 0,008 \\
+xgb & bow      & 0,6280 & 0,6315 & 0,6280 & 0,6291 & 3,81  & 0,025 \\
+mnb & tfidf    & 0,6312 & 0,6274 & 0,6312 & 0,6232 & 0,01  & 0,013 \\
+lr  & glove    & 0,6202 & 0,6280 & 0,6202 & 0,6215 & 1,47  & 0,015 \\
+svm & glove    & 0,6186 & 0,6262 & 0,6186 & 0,6199 & 3,32  & 0,020 \\
+rf  & tfidf    & 0,6108 & 0,6243 & 0,6108 & 0,6115 & 1,11  & 0,067 \\
+nb  & glove    & 0,6092 & 0,6144 & 0,6092 & 0,6105 & 0,03  & 0,010 \\
+xgb & tfidf    & 0,6085 & 0,6105 & 0,6085 & 0,6092 & 11,84 & 0,026 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Na zbiorze LIAR żadna z~klasycznych metod nie przekroczyła progu
+\(F_1 = 0{,}64\). Najlepszy wynik (\(F_1 = 0{,}6326\)) uzyskał
+wielomianowy klasyfikator Bayesa z~reprezentacją BoW, co jest typowym
+zachowaniem dla bardzo krótkich tekstów i~ograniczonego słownika.
+Wynik bliski losowemu (baseline większościowy wynosi około
+\(0{,}56\)) potwierdza, że proste cechy n-gramowe nie wystarczają,
+aby uchwycić niuanse językowe charakteryzujące fałszywe wypowiedzi
+polityków.
+
+\subsection{Analiza czasów uczenia i~wnioskowania}
+\label{sec:wyniki_klasyczne_czas}
+
+Średnie czasy obliczeń dla rodziny klasycznej, zestawione w~podziale
+na zbiory, podano w~Tabeli~\ref{tab:klas_czasy}.
+
+\begin{table}[ht]
+\centering
+\caption{Średnie czasy uczenia i~wnioskowania klasycznych modeli
+w~zależności od zbioru danych (w~sekundach).}
+\label{tab:klas_czasy}
+\begin{tabular}{lrrrr}
+\toprule
+Zbiór & $\overline{t_{tr}}$ & $\max{t_{tr}}$ & $\overline{t_{inf}}$ & $\max{t_{inf}}$ \\
+\midrule
+ISOT    & 18,02  & 150,05 & 0,755 & 11,02  \\
+LIAR    & 3,21   & 16,38  & 0,044 & 0,234  \\
+WELFake & 33,29  & 147,67 & 2,504 & 37,16  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Czas uczenia dla klasycznych modeli pozostaje w~granicach kilkudziesięciu
+sekund nawet dla największego zbioru. Najszybsze są klasyfikatory
+naiwnego Bayesa oraz drzewa decyzyjne (rzędu setnych części sekundy),
+najwolniejszy zaś XGBoost. Wnioskowanie jest zazwyczaj poniżej 0,1~s
+na pełnym zbiorze testowym, z~wyjątkiem $k$-NN, którego złożoność rośnie
+liniowo z~liczbą próbek (do \(37{,}16\)~s na WELFake). Daje to klasycznym
+modelom przewagę pod kątem kosztu eksploatacyjnego w~porównaniu
+z~modelami głębokimi i~transformerami (por.\ rozdz.~\ref{sec:wyniki_transformery}).
+
+\subsection{Wyniki na danych pozyskanych ze stron WWW}
+\label{sec:wyniki_klasyczne_web}
+
+Modele wytrenowane na zbiorach ISOT, LIAR i~WELFake zostały następnie
+poddane ewaluacji na zewnętrznym zbiorze \(1{,}5\)~tys.\ artykułów
+pozyskanych metodą web-scrapingu z~popularnych portali informacyjnych.
+Ewaluacja została przeprowadzona w~trzech wariantach: dla pełnego
+tekstu, dla samych nagłówków oraz dla krótkich fragmentów (lead).
+Tabela~\ref{tab:klas_web} zawiera najlepsze wyniki klasycznych modeli
+w~każdym wariancie.
+
+\begin{table}[ht]
+\centering
+\caption{Najlepsze klasyczne modele w~ewaluacji na danych WWW
+(według miary $F_1$).}
+\label{tab:klas_web}
+\begin{tabular}{lllrrrr}
+\toprule
+Wariant & Zbiór & Model + Emb. & Acc. & Prec. & Recall & $F_1$ \\
+\midrule
+text       & LIAR    & dt + tfidf      & 0,8074 & 0,8210 & 0,8074 & 0,8140 \\
+text       & ISOT    & nb + word2vec   & 0,6929 & 0,8969 & 0,6929 & 0,7533 \\
+text       & WELFake & dt + bow        & 0,7136 & 0,7867 & 0,7136 & 0,7483 \\
+title      & ISOT    & rf + bow        & 0,8799 & 0,8350 & 0,8799 & 0,8524 \\
+title      & WELFake & rf + tfidf      & 0,8981 & 0,8066 & 0,8981 & 0,8499 \\
+title      & LIAR    & svm + tfidf     & 0,6201 & 0,7800 & 0,6201 & 0,6934 \\
+short text & ISOT    & rf + bow        & 0,8970 & 0,8684 & 0,8970 & 0,8747 \\
+short text & WELFake & dt + bow        & 0,8839 & 0,8119 & 0,8839 & 0,8451 \\
+short text & LIAR    & svm + tfidf     & 0,6554 & 0,7990 & 0,6554 & 0,7210 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Z~przeprowadzonej analizy wynika, że klasyczne modele zaskakująco dobrze
+generalizują na dane pozyskane spoza zbioru treningowego, szczególnie
+gdy analizowany jest sam nagłówek lub krótki opis artykułu. Najlepsze
+modele (\textit{rf}~+~\textit{bow} oraz \textit{dt}~+~\textit{bow}) na
+nagłówkach i~lead-ach uzyskują \(F_1 \in [0{,}84;\,0{,}87]\), co
+stanowi nieznaczny spadek względem zbiorów testowych in-domain.
+Wyraźnie gorzej wypadają w~analizie pełnego tekstu artykułu, gdzie
+średnia miara $F_1$ spada do okolic \(0{,}58\). Świadczy to o~tym,
+że ich zdolność uogólniania ogranicza dystrybucyjne podobieństwo
+między zbiorem treningowym a~testowym -- klasyczne reprezentacje
+silnie zależą od częstotliwości występowania konkretnych słów.
+
+\subsection{Podsumowanie}
+\label{sec:wyniki_klasyczne_podsum}
+
+Klasyczne modele uczenia maszynowego stanowią silny i~szybki punkt
+odniesienia w~zadaniu detekcji fałszywych informacji. Na korpusie ISOT
+najlepsze konfiguracje (XGBoost~+~TF-IDF) osiągają niemal idealną
+skuteczność (\(F_1 = 0{,}9977\)), a~na WELFake skutecznie przekraczają
+próg \(0{,}97\). Jednocześnie ich wydajność jest najwyższa w~całym
+badaniu pod względem czasu uczenia i~wnioskowania, co czyni je
+naturalnymi kandydatami w~systemach wdrożeniowych o~niskich opóźnieniach
+(np.\ rozszerzenie do przeglądarki). Słabością tej rodziny jest zbiór
+LIAR -- najtrudniejszy w~całym badaniu -- na którym żaden klasyczny
+model nie przekroczył \(F_1 = 0{,}64\).
+
+\section{Wyniki sieci głębokich}
+\label{sec:wyniki_glebokie}
+
+W~tym rozdziale omówione zostały wyniki czterech architektur sieci
+głębokich: jednokierunkowej sieci LSTM, sieci GRU, dwukierunkowej
+sieci LSTM (BiLSTM) oraz jednowymiarowej sieci konwolucyjnej (CNN).
+Modele zostały zaimplementowane w~bibliotece PyTorch, a~ich
+hiperparametry (rozmiar warstwy ukrytej, dropout, learning rate,
+rozmiar partii) były dobierane przez Optuna. W~odróżnieniu od
+klasycznych modeli sieci głębokie korzystają z~osadzeń słownych
+wczytywanych z~zewnętrznych plików: Word2Vec (Google News, 300d)
+oraz GloVe (6B, 100d).
+
+\subsection{Wyniki na zbiorach testowych}
+\label{sec:wyniki_glebokie_test}
+
+Tabela~\ref{tab:dl_isot} zawiera podsumowanie wyników sieci głębokich
+na zbiorze ISOT.
+
+\begin{table}[ht]
+\centering
+\caption{Wyniki sieci głębokich na zbiorze testowym ISOT.}
+\label{tab:dl_isot}
+\begin{tabular}{llrrrrrr}
+\toprule
+Model & Embedding & Acc. & Prec. & Recall & $F_1$ & $t_{tr}$ [s] & $t_{inf}$ [s] \\
+\midrule
+gru    & word2vec & 0,9946 & 0,9946 & 0,9946 & 0,9946 & 67,06 & 0,491 \\
+bilstm & word2vec & 0,9941 & 0,9941 & 0,9941 & 0,9941 & 71,13 & 0,388 \\
+cnn    & word2vec & 0,9916 & 0,9916 & 0,9916 & 0,9916 & 83,04 & 0,425 \\
+gru    & glove    & 0,9913 & 0,9913 & 0,9913 & 0,9913 & 55,28 & 0,675 \\
+cnn    & glove    & 0,9880 & 0,9882 & 0,9880 & 0,9880 & 17,76 & 0,365 \\
+bilstm & glove    & 0,9877 & 0,9879 & 0,9877 & 0,9877 & 39,21 & 0,633 \\
+lstm   & glove    & 0,9854 & 0,9855 & 0,9854 & 0,9854 & 55,69 & 0,680 \\
+lstm   & word2vec & 0,9844 & 0,9846 & 0,9844 & 0,9844 & 64,12 & 0,415 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Wszystkie modele głębokie na zbiorze ISOT przekraczają granicę
+\(F_1 = 0{,}98\), a~najlepsza konfiguracja (GRU~+~Word2Vec) osiąga
+\(F_1 = 0{,}9946\). Średnia wartość miary $F_1$ wynosi \(0{,}9896\),
+co jest najwyższym wynikiem wśród wszystkich rodzin modeli z~wyjątkiem
+transformerów (por.\ Tabela~\ref{tab:bert_isot}). Można zauważyć,
+że osadzenia Word2Vec systematycznie przewyższają GloVe -- pierwsze
+trzy miejsca rankingu zajmują kombinacje z~tym pierwszym osadzeniem.
+Architektury rekurencyjne (GRU, BiLSTM) okazują się minimalnie lepsze
+od konwolucyjnych, co tłumaczyć można dłuższym kontekstem zdań
+w~artykułach prasowych.
+
+\begin{table}[ht]
+\centering
+\caption{Wyniki sieci głębokich na zbiorze testowym WELFake.}
+\label{tab:dl_welfake}
+\begin{tabular}{llrrrrrr}
+\toprule
+Model & Embedding & Acc. & Prec. & Recall & $F_1$ & $t_{tr}$ [s] & $t_{inf}$ [s] \\
+\midrule
+gru    & word2vec & 0,9824 & 0,9824 & 0,9824 & 0,9824 & 144,14 & 0,999 \\
+bilstm & word2vec & 0,9812 & 0,9812 & 0,9812 & 0,9812 & 166,63 & 1,267 \\
+cnn    & word2vec & 0,9788 & 0,9788 & 0,9788 & 0,9788 & 129,05 & 0,825 \\
+gru    & glove    & 0,9783 & 0,9783 & 0,9783 & 0,9783 & 48,71  & 1,008 \\
+cnn    & glove    & 0,9769 & 0,9771 & 0,9769 & 0,9769 & 36,25  & 0,798 \\
+bilstm & glove    & 0,9761 & 0,9762 & 0,9761 & 0,9761 & 71,27  & 1,257 \\
+lstm   & glove    & 0,9669 & 0,9670 & 0,9669 & 0,9669 & 49,79  & 1,023 \\
+lstm   & word2vec & 0,9604 & 0,9605 & 0,9604 & 0,9604 & 193,55 & 1,306 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Na korpusie WELFake sieci głębokie zachowują przewagę nad klasycznymi
+modelami -- średnia miara $F_1$ wynosi \(0{,}9751\), co przekłada się
+na zysk około 9~punktów procentowych względem rodziny klasycznej.
+Najsłabszą architekturą pozostaje jednokierunkowy LSTM, co jest
+spodziewane: brak informacji ,,z~przyszłości'' istotnie ogranicza
+modelowanie struktur narracyjnych. Z~kolei BiLSTM oraz GRU osiągają
+porównywalne wyniki przy wyraźnie krótszym czasie uczenia w~przypadku
+GRU.
+
+Diametralnie inaczej wyglądają wyniki na zbiorze LIAR
+(Tabela~\ref{tab:dl_liar}).
+
+\begin{table}[ht]
+\centering
+\caption{Wyniki sieci głębokich na zbiorze testowym LIAR.}
+\label{tab:dl_liar}
+\begin{tabular}{llrrrrr}
+\toprule
+Model & Embedding & Acc. & Prec. & Recall & $F_1$ & Uwagi \\
+\midrule
+bilstm & glove    & 0,6179 & 0,6152 & 0,6179 & 0,6157 & --- \\
+cnn    & glove    & 0,6092 & 0,6040 & 0,6092 & 0,6006 & --- \\
+cnn    & word2vec & 0,5638 & 0,5576 & 0,5638 & 0,5580 & --- \\
+bilstm & word2vec & 0,5583 & 0,5795 & 0,5583 & 0,5562 & --- \\
+gru    & word2vec & 0,5583 & 0,3117 & 0,5583 & 0,4001 & klasa większościowa \\
+gru    & glove    & 0,4417 & 0,1951 & 0,4417 & 0,2706 & klasa większościowa \\
+lstm   & word2vec & 0,4417 & 0,1951 & 0,4417 & 0,2706 & klasa większościowa \\
+lstm   & glove    & 0,4417 & 0,1951 & 0,4417 & 0,2706 & klasa większościowa \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Wyniki sieci LSTM i~GRU na LIAR jednoznacznie wskazują na zjawisko
+\textit{collapse} -- macierze pomyłek $\begin{pmatrix}564 & 0\\713 &
+0\end{pmatrix}$ oraz $\begin{pmatrix}0 & 564\\0 & 713\end{pmatrix}$
+oznaczają, że sieci przewidziały wyłącznie jedną etykietę dla
+wszystkich próbek. Wynika to z~dwóch przyczyn: bardzo krótkich
+sekwencji (mediana długości około 18 słów) oraz niewielkiego rozmiaru
+zbioru treningowego (10\,269 wypowiedzi), co dla głębokich sieci
+rekurencyjnych jest dalece niewystarczające. Jedynie architektury
+BiLSTM (z~GloVe) oraz CNN potrafią pokonać granicę większościową --
+najlepszy z~modeli, BiLSTM~+~GloVe, uzyskał \(F_1 = 0{,}6157\), co
+jest wynikiem zbliżonym do najlepszych klasycznych modeli na tym
+zbiorze.
+
+\subsection{Analiza czasów uczenia i~wnioskowania}
+\label{sec:wyniki_glebokie_czas}
+
+\begin{table}[ht]
+\centering
+\caption{Średnie czasy uczenia i~wnioskowania sieci głębokich
+w~zależności od zbioru danych (w~sekundach).}
+\label{tab:dl_czasy}
+\begin{tabular}{lrrrr}
+\toprule
+Zbiór & $\overline{t_{tr}}$ & $\max{t_{tr}}$ & $\overline{t_{inf}}$ & $\max{t_{inf}}$ \\
+\midrule
+ISOT    & 56,66  & 83,04  & 0,509 & 0,680 \\
+LIAR    & 9,43   & 29,45  & 0,079 & 0,220 \\
+WELFake & 104,92 & 193,55 & 1,060 & 1,306 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Czasy uczenia sieci głębokich są przeciętnie 3--5 razy dłuższe od
+klasycznych modeli (np.\ średnio \(104{,}9\)~s vs.\ \(33{,}3\)~s dla
+WELFake), ale wciąż pozostają o~rząd wielkości krótsze od czasów
+transformerów. Inferencja na pełnym zbiorze testowym mieści się
+w~granicach jednej sekundy, co czyni je akceptowalnym wyborem dla
+zastosowań czasu rzeczywistego.
+
+\subsection{Wyniki na danych pozyskanych ze stron WWW}
+\label{sec:wyniki_glebokie_web}
+
+\begin{table}[ht]
+\centering
+\caption{Najlepsze sieci głębokie w~ewaluacji na danych WWW
+(według miary $F_1$).}
+\label{tab:dl_web}
+\begin{tabular}{lllrrrr}
+\toprule
+Wariant & Zbiór & Model + Emb. & Acc. & Prec. & Recall & $F_1$ \\
+\midrule
+text       & LIAR    & bilstm + glove    & 0,8843 & 0,8388 & 0,8843 & 0,8550 \\
+text       & WELFake & bilstm + word2vec & 0,5935 & 0,8073 & 0,5935 & 0,6732 \\
+text       & ISOT    & cnn + word2vec    & 0,5879 & 0,8826 & 0,5879 & 0,6671 \\
+title      & LIAR    & gru + word2vec    & 0,8981 & 0,8066 & 0,8981 & 0,8499 \\
+title      & WELFake & lstm + word2vec   & 0,8874 & 0,8162 & 0,8874 & 0,8467 \\
+title      & ISOT    & cnn + word2vec    & 0,5434 & 0,8800 & 0,5434 & 0,6274 \\
+short text & LIAR    & gru + word2vec    & 0,8977 & 0,8090 & 0,8977 & 0,8511 \\
+short text & WELFake & lstm + word2vec   & 0,8286 & 0,8158 & 0,8286 & 0,8221 \\
+short text & ISOT    & cnn + word2vec    & 0,6321 & 0,8800 & 0,6321 & 0,7050 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+W~ewaluacji na danych WWW sieci głębokie wykazują ciekawą cechę:
+w~przeciwieństwie do klasycznych modeli najlepiej generalizują modele
+wytrenowane na LIAR i~WELFake, mimo że in-domain plasowały się one
+najniżej. Najlepszy wynik w~całej ewaluacji web osiąga BiLSTM~+~GloVe
+trenowany na LIAR (\(F_1 = 0{,}8550\)) na pełnych tekstach
+artykułów -- jest to wynik, który równa się najlepszym klasycznym
+modelom i~wyprzedza transformery o~kilka punktów procentowych. Z~kolei
+modele wytrenowane na ISOT istotnie tracą jakość na danych
+zewnętrznych (\(F_1\) zaledwie \(0{,}63\)--\(0{,}71\)), co potwierdza
+hipotezę, że korpus ISOT zawiera silne korelacje stylistyczne
+(prefiks ,,WASHINGTON (Reuters)'', stałe sygnatury) wyciekające do
+zbioru testowego.
+
+\subsection{Podsumowanie}
+\label{sec:wyniki_glebokie_podsum}
+
+Sieci głębokie stanowią naturalny krok pośredni między klasycznym
+uczeniem maszynowym a~modelami transformerowymi. Na korpusach ISOT
+i~WELFake przekraczają próg \(F_1 = 0{,}97\), a~najlepsza architektura
+(GRU~+~Word2Vec) jest niemal nieodróżnialna od klasyfikatora
+XGBoost~+~TF-IDF. Na trudnym zbiorze LIAR ujawniają się natomiast
+fundamentalne ograniczenia tej rodziny -- modele rekurencyjne
+o~nieprzemyślanej konfiguracji mogą przewidywać wyłącznie klasę
+większościową. Z~drugiej strony właśnie sieci głębokie najlepiej
+generalizują na świeże dane WWW, co czyni je dobrym kandydatem do
+zastosowań produkcyjnych. Stanowi to interesujący kontrast: model,
+który nie uzyskał najwyższej miary $F_1$ na zbiorze testowym, może
+okazać się najbardziej użyteczny w~rzeczywistej eksploatacji.
+
+\section{Wyniki modeli opartych na transformerach}
+\label{sec:wyniki_transformery}
+
+W~rozdziale tym zaprezentowano wyniki czterech wstępnie wytrenowanych
+modeli językowych z~rodziny Transformer: BERT (\textit{bert-base-uncased}),
+DistilBERT (\textit{distilbert-base-uncased}), RoBERTa (\textit{roberta-base})
+oraz FakeBERT -- wariant domenowy oparty na \textit{bert-base-uncased}
+z~dodatkową adaptacją na korpusie artykułów newsowych. Modele zostały
+dostrojone (fine-tuning) na każdym z~trzech zbiorów oddzielnie,
+z~wykorzystaniem optymalizatora AdamW oraz schedulera \textit{linear
+warmup}. Liczba kroków dostrajania, learning rate oraz rozmiar partii
+zostały wybrane przez Optuna z~mechanizmem przedwczesnego zatrzymywania
+(\textit{MedianPruner}).
+
+\subsection{Wyniki na zbiorach testowych}
+\label{sec:wyniki_bert_test}
+
+\begin{table}[ht]
+\centering
+\caption{Wyniki modeli transformerowych na zbiorze testowym ISOT.}
+\label{tab:bert_isot}
+\begin{tabular}{llrrrrrr}
+\toprule
+Model & Tokenizer & Acc. & Prec. & Recall & $F_1$ & $t_{tr}$ [s] & $t_{inf}$ [s] \\
+\midrule
+fakebert   & bert-base-uncased       & 1,0000 & 1,0000 & 1,0000 & 1,0000 & 302,70 & 3,54 \\
+roberta    & roberta-base            & 0,9995 & 0,9995 & 0,9995 & 0,9995 & 179,61 & 1,81 \\
+bert       & bert-base-uncased       & 0,9990 & 0,9990 & 0,9990 & 0,9990 & 264,51 & 3,03 \\
+distilbert & distilbert-base-uncased & 0,9982 & 0,9982 & 0,9982 & 0,9982 & 106,44 & 1,42 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Na zbiorze ISOT wszystkie modele transformerowe osiągnęły wynik bardzo
+bliski idealnemu. Spektakularnie wypadł FakeBERT, który dla 3911
+próbek testowych nie pomylił się ani razu (macierz pomyłek
+$\begin{pmatrix}1791 & 0\\0 & 2120\end{pmatrix}$). Również pozostałe
+modele przekroczyły barierę \(F_1 = 0{,}998\). Warto jednak zauważyć,
+że na zbiorze ISOT różnica między rodziną klasyczną a~transformerową
+sięga jedynie \(0{,}2\)--\(0{,}3\) punktu procentowego $F_1$, a~koszt
+obliczeniowy transformerów jest około 10-krotnie wyższy. Powstaje
+zatem pytanie, czy nakład obliczeniowy jest uzasadniony.
+
+\begin{table}[ht]
+\centering
+\caption{Wyniki modeli transformerowych na zbiorze testowym WELFake.}
+\label{tab:bert_welfake}
+\begin{tabular}{llrrrrrr}
+\toprule
+Model & Tokenizer & Acc. & Prec. & Recall & $F_1$ & $t_{tr}$ [s] & $t_{inf}$ [s] \\
+\midrule
+roberta    & roberta-base            & 0,9978 & 0,9978 & 0,9978 & 0,9978 & 702,81 & 5,79  \\
+bert       & bert-base-uncased       & 0,9951 & 0,9951 & 0,9951 & 0,9951 & 563,95 & 5,54  \\
+fakebert   & bert-base-uncased       & 0,9950 & 0,9950 & 0,9950 & 0,9950 & 856,57 & 10,41 \\
+distilbert & distilbert-base-uncased & 0,9943 & 0,9944 & 0,9943 & 0,9943 & 286,44 & 3,64  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Bardziej wymagający korpus WELFake pokazuje, że rodzina transformerów
+oferuje wymierną przewagę nad klasycznymi modelami i~sieciami
+głębokimi. RoBERTa osiągnęła tu najlepszy wynik (\(F_1 = 0{,}9978\)),
+co stanowi zysk około \(2{,}6\) punktu procentowego względem
+najlepszego klasycznego modelu (XGBoost~+~BoW) oraz \(1{,}5\) punktu
+względem GRU~+~Word2Vec. Wszystkie cztery modele transformerowe
+mieszczą się w~bardzo wąskim paśmie wyników (\(0{,}9943\)--\(0{,}9978\)),
+co dowodzi spójności podejścia opartego na uwadze.
+
+\begin{table}[ht]
+\centering
+\caption{Wyniki modeli transformerowych na zbiorze testowym LIAR.}
+\label{tab:bert_liar}
+\begin{tabular}{llrrrrrr}
+\toprule
+Model & Tokenizer & Acc. & Prec. & Recall & $F_1$ & $t_{tr}$ [s] & $t_{inf}$ [s] \\
+\midrule
+roberta    & roberta-base            & 0,6578 & 0,6560 & 0,6578 & 0,6564 & 50,48  & 0,400 \\
+bert       & bert-base-uncased       & 0,6531 & 0,6537 & 0,6531 & 0,6534 & 31,98  & 0,685 \\
+distilbert & distilbert-base-uncased & 0,6421 & 0,6434 & 0,6421 & 0,6426 & 27,95  & 0,263 \\
+fakebert   & bert-base-uncased       & 0,6406 & 0,6380 & 0,6406 & 0,6383 & 285,38 & 1,349 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Na zbiorze LIAR transformery uzyskały najlepsze wyniki w~całym
+badaniu (\(F_1 = 0{,}6564\) dla RoBERTa) -- choć przewaga nad
+najlepszym klasycznym modelem (MNB~+~BoW, \(F_1 = 0{,}6326\)) jest
+umiarkowana (około \(2{,}4\) punktu procentowego), to jest istotnie
+większa niż w~przypadku sieci głębokich, które na tym zbiorze
+nie potrafią konsekwentnie pokonać klasyfikatora większościowego.
+Z~drugiej strony FakeBERT, mimo długiego czasu uczenia, okazuje się
+najsłabszym z~transformerów -- dodatkowy etap dostrajania
+na artykułach nie pomaga w~klasyfikacji krótkich wypowiedzi
+politycznych, a~wręcz utrudnia adaptację do tej domeny.
+
+\subsection{Analiza czasów uczenia i~wnioskowania}
+\label{sec:wyniki_bert_czas}
+
+\begin{table}[ht]
+\centering
+\caption{Średnie czasy uczenia i~wnioskowania transformerów
+w~zależności od zbioru danych (w~sekundach).}
+\label{tab:bert_czasy}
+\begin{tabular}{lrrrr}
+\toprule
+Zbiór & $\overline{t_{tr}}$ & $\max{t_{tr}}$ & $\overline{t_{inf}}$ & $\max{t_{inf}}$ \\
+\midrule
+ISOT    & 213,32 & 302,70 & 2,453 & 3,544  \\
+LIAR    &  98,95 & 285,38 & 0,674 & 1,349  \\
+WELFake & 602,44 & 856,57 & 6,346 & 10,411 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Modele transformerowe są zdecydowanie najbardziej kosztowne pod
+względem zasobów obliczeniowych. Średni czas uczenia na zbiorze
+WELFake wynosi \(602{,}4\)~s, czyli około 18 razy więcej niż
+w~przypadku rodziny klasycznej i~6 razy więcej niż sieci głębokich.
+Pojedyncze wnioskowanie zajmuje 1--10~ms na próbkę, co oznacza,
+że w~scenariuszu wsadowym (batch~=~32) możliwe jest osiągnięcie
+przepustowości około 200~próbek/s na pojedynczej karcie GPU klasy
+T4. Najszybszym transformerem pozostaje DistilBERT, oferując około
+\(40\%\) krótszy czas inferencji w~stosunku do BERT przy zachowaniu
+zbliżonej skuteczności.
+
+\subsection{Wyniki na danych pozyskanych ze stron WWW}
+\label{sec:wyniki_bert_web}
+
+\begin{table}[ht]
+\centering
+\caption{Najlepsze modele transformerowe w~ewaluacji na danych WWW
+(według miary $F_1$).}
+\label{tab:bert_web}
+\begin{tabular}{lllrrrr}
+\toprule
+Wariant & Zbiór & Model & Acc. & Prec. & Recall & $F_1$ \\
+\midrule
+text       & ISOT    & roberta    & 0,7311 & 0,8288 & 0,7311 & 0,7724 \\
+text       & WELFake & fakebert   & 0,6629 & 0,7952 & 0,6629 & 0,7205 \\
+text       & LIAR    & fakebert   & 0,5641 & 0,8247 & 0,5641 & 0,6498 \\
+title      & ISOT    & roberta    & 0,7465 & 0,8630 & 0,7465 & 0,7899 \\
+title      & WELFake & fakebert   & 0,7547 & 0,7960 & 0,7547 & 0,7747 \\
+title      & LIAR    & fakebert   & 0,2711 & 0,7905 & 0,2711 & 0,3273 \\
+short text & ISOT    & roberta    & 0,8418 & 0,8741 & 0,8418 & 0,8556 \\
+short text & ISOT    & fakebert   & 0,7571 & 0,8909 & 0,7571 & 0,8017 \\
+short text & LIAR    & fakebert   & 0,5191 & 0,8622 & 0,5191 & 0,6078 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+W~ewaluacji na danych pozyskanych ze stron WWW transformery
+prezentują niejednoznaczny obraz. Z~jednej strony osiągają najwyższą
+średnią miarę $F_1$ wśród wszystkich rodzin dla pełnych tekstów
+(\(\overline{F_1} = 0{,}651\) wobec \(0{,}580\) dla klasycznych
+i~\(0{,}576\) dla sieci głębokich), co świadczy o~ich potencjale do
+generalizacji. Z~drugiej strony w~scenariuszu samych nagłówków
+i~krótkich fragmentów ulegają sieciom głębokim wytrenowanym na LIAR.
+Najlepszą pojedynczą konfiguracją jest RoBERTa wytrenowana na ISOT,
+która na krótkich fragmentach uzyskuje \(F_1 = 0{,}8556\) -- jest to
+najwyższa miara $F_1$ ewaluacji web-scrapingu w~podziale na typ
+testu \textit{short text}.
+
+\subsection{Podsumowanie}
+\label{sec:wyniki_bert_podsum}
+
+Modele oparte na architekturze Transformer osiągają najwyższe wyniki
+w~zadaniu detekcji fałszywych informacji we wszystkich trzech badanych
+zbiorach. Na ISOT idealną skuteczność uzyskuje FakeBERT (\(F_1 = 1{,}0\)),
+na WELFake -- RoBERTa (\(F_1 = 0{,}9978\)), a~na trudnym zbiorze LIAR
+ponownie RoBERTa (\(F_1 = 0{,}6564\)), choć w~tym przypadku różnica
+względem prostych modeli klasycznych jest niewielka. Ich główną
+słabością jest wysoki koszt obliczeniowy -- średnio kilkukrotnie
+wyższy zarówno na etapie uczenia, jak i~wnioskowania, niż w~przypadku
+pozostałych rodzin. Dodatkowo na danych spoza zbioru treningowego
+przewaga transformerów nad sieciami głębokimi jest niewielka lub
+wręcz odwraca się na korzyść tych drugich. Daje to ciekawą wskazówkę
+dla projektowania systemów produkcyjnych: w~scenariuszach, w~których
+dystrybucja danych testowych różni się od treningowej, prostsze
+modele potrafią dorównać, a~niekiedy nawet przewyższyć kosztowne
+transformery.
+
+% =====================================================================
+% Koniec rozdziałów z~wynikami eksperymentów.
+% =====================================================================
