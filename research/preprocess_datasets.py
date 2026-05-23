@@ -1,9 +1,15 @@
+import re
+from pathlib import Path
+
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from pathlib import Path
 
 BASE = Path(__file__).parent
 RANDOM_STATE = 42
+
+REUTERS_PREFIX = re.compile(r"[A-Z][A-Za-z\s/]+ \(Reuters\)\s*-\s*")
+REUTERS_TAG = re.compile(r"\(Reuters\)")
+VIDEO_TAG = re.compile(r"[\[\(]video[\]\)]", re.IGNORECASE)
 
 
 def save_splits(df: pd.DataFrame, out_dir: Path, train_ratio=0.8, test_ratio=0.1):
@@ -26,6 +32,13 @@ def process_isot():
     true_df["label"] = 0
     fake_df["label"] = 1
     df = pd.concat([true_df, fake_df], ignore_index=True)[["text", "label"]]
+
+    texts = df["text"].astype(str)
+    n_reuters = int(texts.str.contains(r"\(Reuters\)", na=False).sum())
+    n_video = int(texts.str.contains(r"[\[\(]video[\]\)]", case=False, na=False).sum())
+    df["text"] = df["text"].apply(clean_reuters)
+    print(f"  cleaned {n_reuters} Reuters + {n_video} [video] tags before splitting")
+
     save_splits(df, BASE / "ISOT")
 
 
@@ -57,28 +70,19 @@ def process_welfake():
     save_splits(df, BASE / "WELFake")
 
 
-def run_clean_isot():
-    print("\nCleaning ISOT (removing Reuters leakage)")
-    import importlib.util, sys
-    # Update ISOT_DIR in clean_isot module before running
-    spec = importlib.util.spec_from_file_location("clean_isot", BASE / "clean_isot.py")
-    mod = importlib.util.module_from_spec(spec)
-    # Override the directory to point to local ISOT folder
-    mod.ISOT_DIR = BASE / "ISOT"
-    spec.loader.exec_module(mod)
-    # Re-override after exec (module-level assignment may have reset it)
-    mod.ISOT_DIR = BASE / "ISOT"
-    for split in ["train", "test", "val"]:
-        path = mod.ISOT_DIR / f"{split}.csv"
-        if path.exists():
-            stats = mod.clean_file(path)
-            print(f"  {stats['file']}: cleaned {stats['reuters']} Reuters + {stats['video']} [video] tags (out of {stats['total']} rows)")
+def clean_reuters(text: str) -> str:
+    """Remove Reuters agency tags and [video] tags from ISOT text."""
+    if not isinstance(text, str):
+        return text
+    text = REUTERS_PREFIX.sub("", text)
+    text = REUTERS_TAG.sub("", text)
+    text = VIDEO_TAG.sub("", text)
+    return text.strip()
 
 
 if __name__ == "__main__":
     process_isot()
     process_liar()
     process_welfake()
-    run_clean_isot()
     print("\nAll done!")
 
