@@ -1,175 +1,44 @@
-# Fake News Detector & Research Framework
+# Fake News Detector
 
-A comprehensive machine learning project for detecting fake news using various NLP techniques. The repository contains a **Research Framework** for benchmarking and optimising models across multiple datasets and a **Chrome Extension** powered by a FastAPI backend that detects fake news in real time.
+## Project Goal
 
----
+Fake News Detector is an NLP and machine learning project for classifying news text as `REAL` or `FAKE`.
 
-## Table of Contents
+This repository contains a fake-news detection project with two main parts:
+- A research pipeline for training and evaluating NLP/ML models on ISOT, LIAR, and WELFake datasets.
+- A Chrome extension connected to a FastAPI backend for real-time prediction on selected webpage text.
 
-1. [Project Overview](#project-overview)
-2. [Quick Start](#quick-start)
-3. [How it Works](#how-it-works)
-4. [Architecture](#architecture)
-5. [Project Structure](#project-structure)
-6. [Prerequisites](#prerequisites)
-7. [Installation & Setup](#installation--setup)
-8. [Verify Your Installation](#verify-your-installation)
-9. [Dataset Preprocessing](#dataset-preprocessing)
-10. [Research Pipeline — Detailed Guide](#research-pipeline--detailed-guide)
-11. [API & Chrome Extension](#api--chrome-extension)
-12. [Google Colab](#google-colab)
-13. [Experiment Outputs](#experiment-outputs)
-14. [MLflow Tracking](#mlflow-tracking)
-15. [Models & Embeddings Reference](#models--embeddings-reference)
-16. [Smart Routing Logic](#smart-routing-logic)
-17. [Datasets](#datasets)
-18. [Docker](#docker)
-19. [Additional Resources](#additional-resources)
-20. [Contributing](#contributing)
+The main deliverables are:
+- trained models (`saved_models/`),
+- benchmark and analysis outputs (`experiments/`, `results_*.csv`),
+- a working demo path: backend API + browser extension.
 
----
+## Requirements
 
-## Project Overview
+### Software
+- Python 3.10+ (recommended 3.11)
+- pip
+- Node.js 18+ and npm (for extension tests)
+- Google Chrome (for extension demo)
+- Optional: Docker Desktop (for containerized run)
 
-The project has two main components:
+### Hardware
+- Demo/API only: typical laptop, at least 4 GB RAM
+- Full training: higher RAM and significantly more time/storage
+- Optional GPU recommended for deep learning/transformer experiments
 
-| Component | Description |
-|---|---|
-| **Research framework** | Hydra/Optuna training pipeline, web scraping, web testing, and result tracking |
-| **Chrome extension** | Browser popup that sends selected text to the FastAPI backend and displays a real/fake verdict |
-
----
-
-## Quick Start
-
-### 1. Setup the environment
-```bash
-# Clone and setup
-git clone https://github.com/wgrzesik/fake-news-detector.git
-cd fake-news-detector
-python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
-```
-
-### 2. Full Research Pipeline
-```bash
-# After installation, preprocess datasets (first time only)
-python -m research.preprocess_datasets
-
-# Run training & evaluation
-python -m research.train_models
-python -m research.web.collect_web
-python -m research.evaluate_web
-python -m research.analyze_results
-
-# View results in MLflow UI
-mlflow ui --backend-store-uri sqlite:///mlflow.db
-# Open http://localhost:5000
-```
-
-### 3. Chrome Extension & API
-
-For detailed setup instructions, see [API & Chrome Extension](#api--chrome-extension) section.
-
-Quick version:
-```bash
-# Start API
-python backend/api.py
-
-# Then load extension in Chrome (see detailed section for steps)
-```
-
----
-
-## How it Works
-
-### Research pipeline
-
-1. **Dataset preprocessing** — Raw datasets (ISOT, LIAR, WELFake) are processed into train/test/val splits using `research/preprocess_datasets.py`. This script:
-   - Loads raw dataset files (CSV/TSV format)
-   - Binarises labels according to dataset-specific schemes (e.g., LIAR's 6-point scale → 0/1)
-   - Shuffles and stratifies splits into 80% train / 10% test / 10% validation
-   - Saves clean CSV files with `text` and `label` columns to `research/configs/datasets/processed/`
-   - Optionally cleans ISOT to remove Reuters leakage (via `clean_isot.py`)
-
-2. **Dataset loading** — Three labelled news datasets (ISOT, LIAR, WELFake) are read from pre-split `train.csv` / `test.csv` / `val.csv` files. Each row contains a `text` column and a binary `label` (0 = fake, 1 = real).
-
-3. **Preprocessing** — `TextPreprocessor` applies one of two strategies selected automatically from `ModelFactory.PREPROCESSING_MAP`:
-   - `classic` — lowercase, strip URLs/HTML, remove punctuation and digits, collapse whitespace. Used for all classical ML and deep learning models.
-   - `bert` — whitespace normalisation only. Used for HuggingFace transformer models to preserve casing and subword boundaries.
-
-4. **Embedding** — For classical ML and deep learning models the preprocessed text is converted to dense vectors:
-   - `tfidf` / `bow` — sparse count-based representations fit on the training split.
-   - `word2vec` / `glove` — each document is represented as the average of its token embeddings.
-   - Transformer and DL models tokenise text internally; no external embedder step is needed.
-
-5. **Hyperparameter optimisation** — [Optuna](https://optuna.org/) runs `n_trials` experiments per model × embedding × dataset combination. A `TPESampler` proposes candidates and a `MedianPruner` kills unpromising transformer trials early. The best trial's hyperparameters are used to retrain the final model.
-
-6. **Tracking** — `HybridTrackingManager` writes results simultaneously to:
-   - A local `experiments/metrics/training_results.csv` (durable, Drive-backed in Colab).
-   - An MLflow SQLite database for UI-based comparison across runs.
-   - Per-experiment JSON (best hyperparameters), CSV (trial history), and prediction files.
-
-7. **Serialisation** — The final model (`classifier.joblib`), embedder (`embedder.pkl`), and optional scaler (`scaler.joblib`) are saved to `saved_models/{dataset}/{model_name}/`.
-
-### API prediction
-
-1. The FastAPI server (`backend/api.py`) loads three specialised models at startup via the `lifespan` context manager.
-2. `POST /predict` receives a JSON body `{"text": "..."}`.
-3. A word-count heuristic selects the best model (see [Smart Routing Logic](#smart-routing-logic)).
-4. The selected model's `predict()` method preprocesses the text, vectorises it, runs inference, and returns a `label`, `score`, and metadata dict.
-
-### Chrome extension
-
-1. The user highlights text on any webpage and clicks the extension icon.
-2. `popup.js` reads the selection via `window.getSelection()` and POSTs it to `http://127.0.0.1:8000/predict`.
-3. The verdict (`REAL` / `FAKE`) and confidence score are displayed with colour-coded styling.
-
----
-
-## Architecture
-
-```
-Raw Datasets (ISOT, LIAR, WELFake)
-        │
-        ▼
-Dataset Preprocessing (preprocess_datasets.py)
- (split into train/test/val)
-        │
-        ▼
-Dataset loading (train.csv / test.csv / val.csv)
-        │
-        ▼
-Text Preprocessing (TextPreprocessor)
-        │
-        ▼
-Embedding (TF-IDF / BoW / Word2Vec / GloVe / Transformers)
-        │
-        ▼
-Model training & Optuna optimisation (train_models.py)
-        │
-        ▼
-Evaluation & result tracking (tracking_manager.py, evaluate_web.py)
-        │
-        ▼
- saved_models/   ←→   FastAPI backend (api.py)
-                              │
-                              ▼
-                    Chrome Extension (extension/)
-```
-
----
-
-## Project Structure
+## Repository Structure
 
 ```text
 fake-news-detector/
-├── backend/
-│   └── api.py                        # FastAPI server with smart model routing
+├── backend/                          # FastAPI server with smart model routing
+│   └── api.py                        
 ├── extension/                        # Chrome Extension
 │   ├── manifest.json
 │   ├── popup.html
+│   ├── popup.js
+│   ├── api.js
+│   ├── ui.js
 │   ├── popup.js
 │   └── styles.css
 ├── research/
@@ -201,6 +70,9 @@ fake-news-detector/
 │   ├── hyperparams/                  # Best Optuna hyperparameters (JSON)
 │   ├── trial_history/                # Optuna trial history CSVs
 │   └── results/                      # Visualisation outputs
+├── tests/                            
+│   ├── backend/                      # Tests for backend
+│   ├── extension/                    # Jest tests for extension modules
 ├── saved_models/                     # Serialised models (.joblib, .pkl) — gitignored
 ├── requirements.txt
 ├── README.md
@@ -210,536 +82,216 @@ fake-news-detector/
 └── fake_news_detector.ipynb          # Google Colab notebook
 ```
 
----
+## Installation and Configuration
 
-## Prerequisites
-
-- **Python 3.9+** (recommended: 3.10 or 3.11 for best compatibility)
-- `pip` or `conda` package manager
-- **For API only**: ~2 GB RAM, ~5 GB disk space
-- **For training**:
-  - CPU: 8+ GB RAM, 50+ GB disk (multiple datasets)
-  - GPU (recommended): NVIDIA CUDA 11.8+ / 12.1+ with cuDNN (for transformer models)
-- Google Chrome (for the Chrome extension)
-- Git
-
-### Optional but recommended
-
-- **NVIDIA GPU**: Dramatically speeds up transformer and deep learning model training (50x+ faster)
-- **Google Colab**: Free GPU access for training on large datasets (see [Google Colab](#google-colab) section)
-
----
-
-## Installation & Setup
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/wgrzesik/fake-news-detector.git
-   cd fake-news-detector
-   ```
-
-2. **(Recommended) Create a virtual environment**
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate   # Windows: .venv\Scripts\activate
-   ```
-
-3. **Install dependencies**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-4. **Download raw datasets** (optional)
-
-   If you plan to preprocess datasets yourself, download them and place them in `research/` directory:
-
-   | Dataset | Download link | Expected location |
-   |---|---|---|
-   | ISOT | [https://www.uvic.ca/engineering/ece/isot/datasets/](https://www.uvic.ca/engineering/ece/isot/datasets/) | `research/ISOT/` |
-   | LIAR | [https://www.cs.ucsb.edu/~william/data/liar_dataset.zip](https://www.cs.ucsb.edu/~william/data/liar_dataset.zip) | `research/LIAR/` |
-   | WELFake | [https://zenodo.org/record/4561253](https://zenodo.org/record/4561253) | `research/WELFake/` |
-
-5. **Preprocess datasets** 
-
-   After downloading raw datasets (step 4), preprocess them into train/test/val splits:
-
-   ```bash
-   python -m research.preprocess_datasets
-   ```
-
-   This creates processed datasets at:
-   - `research/configs/datasets/processed/isot/` (train.csv, test.csv, val.csv)
-   - `research/configs/datasets/processed/liar/` (train.csv, test.csv, val.csv)
-   - `research/configs/datasets/processed/welfake/` (train.csv, test.csv, val.csv)
-
-   See [Dataset Preprocessing](#dataset-preprocessing) section for full details on what this script does for each dataset.
-
----
-
-## Verify Your Installation
-
-Before running experiments or the API, verify that your environment is set up correctly:
+Clone the repository:
 
 ```bash
-# Check Python version (should be 3.9+)
-python --version
-
-# Test imports
-python -c "import torch, transformers, sklearn, hydra; print('✓ All dependencies installed')"
+git clone https://github.com/wgrzesik/fake-news-detector.git
+cd fake-news-detector
 ```
 
-If dependencies fail, run `pip install -r requirements.txt` again.
-
----
-
-The `research/preprocess_datasets.py` script automates the preparation of raw datasets into train/test/val splits suitable for the training pipeline.
-
-### Overview
-
-This script:
-- **Normalises labels** according to dataset-specific schemes (e.g., LIAR's 6-point Likert scale → binary 0/1)
-- **Splits data** into 80% training, 10% test, 10% validation using stratified sampling (preserves class balance)
-- **Validates quality** by removing rows with missing text fields
-- **Cleans ISOT** to remove Reuters leakage (articles present in both real and fake subsets)
-- **Saves normalised CSVs** with consistent `text` and `label` columns
-
-### Prerequisites
-
-All raw datasets must be placed in the `research/` directory before running preprocessing:
-
-```
-research/
-├── ISOT/
-│   ├── True.csv
-│   └── Fake.csv
-├── LIAR/
-│   ├── train.tsv
-│   ├── test.tsv
-│   └── valid.tsv
-└── WELFake/
-    └── data.csv
-```
-
-### Running the preprocessor
+Create and activate a Python virtual environment:
 
 ```bash
-python -m research.preprocess_datasets
+python -m venv .venv
 ```
 
-### Output
-
-Processed datasets are saved to `research/configs/datasets/processed/{dataset}/`:
-
-```
-research/configs/datasets/processed/
-├── isot/
-│   ├── train.csv
-│   ├── test.csv
-│   └── val.csv
-├── liar/
-│   ├── train.csv
-│   ├── test.csv
-│   └── val.csv
-└── welfake/
-    ├── train.csv
-    ├── test.csv
-    └── val.csv
-```
-
-Each file contains:
-- `text` — News article or claim text
-- `label` — Binary label (0 = fake, 1 = real)
-
-### Dataset-specific processing
-
-#### ISOT
-- Combines `True.csv` and `Fake.csv` (True articles → label 1, Fake articles → label 0)
-- Stratified 80/10/10 split
-- Additional cleaning: removing Reuters articles that appear in both subsets
-
-#### LIAR
-- TSV format with predefined train/test/valid splits (original split structure is preserved)
-- Label mapping: `{pants-fire, false, barely-true}` → 1 (fake), `{half-true, mostly-true, true}` → 0 (real)
-- Removes statements not in the target label set
-
-#### WELFake
-- Combines four external datasets for diversity
-- Stratified 80/10/10 split
-- Already contains `text` and `label` columns; no additional mapping needed
-
----
-
-## Research Pipeline — Detailed Guide
-
-All preprocessing must be completed first (see [Dataset Preprocessing](#dataset-preprocessing) section). Then proceed with the training pipeline:
-
-### Step 1: Hydra/Optuna pipeline (`research/train_models.py`)
-
-Runs Optuna hyperparameter search for every dataset × model × embedding combination and tracks results with MLflow:
+Windows PowerShell:
 
 ```bash
-python -m research.train_models
+.venv\Scripts\Activate.ps1
 ```
 
-Key configuration options are in `research/configs/config.yaml`:
-
-| Key | Default | Description |
-|---|---|---|
-| `datasets_list` | `[isot, liar, welfake]` | Datasets to iterate over |
-| `models_to_optimize` | all 8 | Models to run |
-| `embeddings_to_use` | all 4 | Embeddings to run |
-| `optuna.n_trials` | `1` | Optuna trials per experiment |
-| `preprocessing.name` | `classic` | Preprocessing strategy |
-| `mlflow.experiment_name` | `fake_news_detection` | MLflow experiment name |
-
-Results are saved to `experiments/metrics/training_results.csv`.
-
-### Step 2: Collect web data (`research/web/collect_web.py`)
-
-Scrapes real news articles from the web:
+Linux/macOS:
 
 ```bash
-python -m research.web.collect_web
+source .venv/bin/activate
 ```
 
-Scraped data is saved to the directory configured in `config.yaml` under `web_scraping.output_dir`.
-
-### Step 3: Evaluate on web data (`research/evaluate_web.py`)
-
-Tests all saved models against web-scraped data:
+Install Python dependencies:
 
 ```bash
-# Test all models using default config
-python -m research.evaluate_web
-
-# Test specific models only (Hydra override)
-python -m research.evaluate_web models_to_optimize=[svm,xgb,rf]
-
-# Test specific embeddings
-python -m research.evaluate_web embeddings_to_use=[tfidf]
-
-# Custom dataset list
-python -m research.evaluate_web datasets_list=[liar]
+pip install -r requirements.txt
 ```
 
-Configuration is managed via Hydra overrides on `research/configs/config.yaml`:
-
-| Override | Default | Description |
-|---|---|---|
-| `datasets_list` | `[isot, liar, welfake]` | Datasets whose trained models to load |
-| `models_to_optimize` | all 8 | Filter by model name(s) |
-| `embeddings_to_use` | all 4 | Filter by embedding name(s) |
-| `web_testing.results_dir` | `./experiments/web_test_results` | Where to write result CSVs |
-
-### Step 4: Analyse results (`research/analyze_results.py`)
-
-Compares training results with web evaluation results, generates per-dataset and global rankings, delta metrics and visualisations:
+Install JavaScript test dependencies:
 
 ```bash
-python -m research.analyze_results
+cd tests/extension
+npm install
+cd ../..
 ```
 
-| Output | Location |
-|---|---|
-| Per-dataset ranking & charts | `experiments/results/{dataset}/` |
-| Global ranking & charts | `experiments/results/all/` |
-| Cross-comparison summary | `experiments/results/{dataset}/summary.csv` |
+## Running the Demonstration
 
----
+The recommended evaluation scenario is the local backend plus Chrome extension.
 
-## API & Chrome Extension
-
-### Starting the API server
+Start the backend from the repository root:
 
 ```bash
 python backend/api.py
 ```
 
-The server will start on `http://127.0.0.1:8000` and load three pre-trained models on startup.
+The API loads three model routes when matching artifacts are available:
 
-### Testing the API
+- `short_text`: WELFake + XGBoost + TF-IDF
+- `general`: ISOT + Random Forest + Bag of Words
+- `long_article`: LIAR + BiLSTM + GloVe
+
+Then load the extension in Chrome:
+
+1. Open `chrome://extensions/`.
+2. Enable `Developer mode`.
+3. Click `Load unpacked`.
+4. Select the `extension/` directory.
+5. Open a webpage, highlight at least 10 characters, open the extension, and click `Analyze Selection`.
+
+
+## Expected Result
+
+When the demo is running correctly:
+
+- the API is available at `http://127.0.0.1:8000`,
+- Swagger documentation is available at `http://127.0.0.1:8000/docs`,
+- `GET /health` returns loaded model keys or `degraded` if no model artifacts were loaded,
+- the extension shows a prediction label, confidence score, and model metadata,
+- too-short selections return a neutral message instead of calling a model.
+
+Example API request:
 
 ```bash
-# In a browser or terminal:
-curl -X POST http://127.0.0.1:8000/predict \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Your news text here"}'
+curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -d "{\"text\":\"This is a sample news text long enough for prediction.\"}"
 ```
 
-For interactive documentation, visit:
-- **Swagger UI**: `http://127.0.0.1:8000/docs`
-- **ReDoc**: `http://127.0.0.1:8000/redoc`
-
-### Loading the Chrome Extension
-
-1. Open Chrome and go to `chrome://extensions/`
-2. Enable **Developer mode** (top-right toggle)
-3. Click **Load unpacked**
-4. Select the `extension/` folder from this project
-
-### Using the extension
-
-1. Navigate to any news website
-2. Select (highlight) a paragraph or headline
-3. Click the **Fake News Detector** icon in the Chrome toolbar
-4. Click **ANALYZE SELECTION**
-5. View the verdict (REAL/FAKE) with confidence score
-
----
-
-## API Response Format
+Expected response shape:
 
 ```json
 {
   "label": "REAL",
-  "score": 0.92,
+  "score": 0.88,
   "meta": {
     "used_dataset": "ISOT",
     "used_model": "rf",
-    "word_count": 250
+    "word_count": 11
   }
 }
 ```
 
----
+## Data
 
-## Google Colab
+The full raw datasets are not bundled in the repository because of size and licensing constraints.
 
-The repository includes `fake_news_detector.ipynb` for running the full training pipeline on Google Colab with automatic Google Drive persistence. This is the recommended approach for training transformer and deep learning models, which benefit from GPU acceleration.
+Datasets used by the project:
 
-### First-time setup
+- ISOT Fake News Dataset: `https://www.uvic.ca/engineering/ece/isot/datasets/`
+- LIAR dataset: `https://www.cs.ucsb.edu/~william/data/liar_dataset.zip`
+- WELFake dataset: `https://zenodo.org/record/4561253`
 
-1. Upload your datasets and pre-trained word vectors to `My Drive/fake-news-results/`:
-   ```
-   fake-news-results/
-   └── datasets/
-       ├── processed/      ← ISOT/, LIAR/, WELFake/ (train.csv, test.csv)
-       └── embeddings/     ← glove.6B.100d.txt, GoogleNews-vectors-negative300.bin
-   ```
-2. Copy `colab_secrets.json.template` to `colab_secrets.json` and fill in your GitHub personal access token (already in `.gitignore`).
+Place raw datasets in:
 
-### Notebook cells
+```text
+research/ISOT/
+research/LIAR/
+research/WELFake/
+```
 
-| Cell | Description |
-|---|---|
-| 0 — Configuration | Loads `colab_secrets.json` for repo URL and Drive paths |
-| 1 — Mount Drive | `drive.mount("/content/drive")` |
-| 2 — Clone / pull repo | Clones on first run; pulls latest changes on subsequent runs |
-| 3 — Symlink setup | Links Drive folders into the project via `colab_setup.py` |
-| 4 — Install deps | `pip install -r requirements.txt` |
-| 5 — Preprocess datasets | `python research/preprocess_datasets.py` (first time only) |
-| 6 — Train models | `python -m research.train_models` (all Hydra overrides apply) |
-| 7 — Collect web data | `python -m research.web.collect_web` |
-| 8 — Evaluate on web | `python -m research.evaluate_web` |
-| 9 — Analyse results | `python -m research.analyze_results` |
+Processed datasets are expected in:
 
-All outputs (models, experiments, MLflow DB) are written back to Drive, so interrupted sessions resume from where they left off.
+```text
+research/configs/datasets/processed/isot/
+research/configs/datasets/processed/liar/
+research/configs/datasets/processed/welfake/
+```
 
----
+Run preprocessing from the repository root:
 
-## Experiment Outputs
+```bash
+python -m research.preprocess_datasets
+```
 
-### Unified result schema
+## Reproduction and Verification of Results
 
-The training pipeline writes results using the following column schema:
+To reproduce the main research workflow, run:
 
-| Column | Description |
-|---|---|
-| `dataset` | Dataset name (ISOT, LIAR, WELFake) |
-| `model` | Model key (svm, lr, rf, …) |
-| `embedding` | Embedding key (tfidf, bow, word2vec, glove) |
-| `preprocessing` | Preprocessing strategy (`classic` for the training pipeline) |
-| `accuracy` | Test accuracy |
-| `precision` | Weighted precision |
-| `recall` | Weighted recall |
-| `f1_score` | Weighted F1 score |
-| `train_time_sec` | Model training time in seconds |
-| `inference_time_sec` | Evaluation/inference time in seconds |
-| `timestamp` | ISO-8601 timestamp |
+```bash
+python -m research.train_models
+python -m research.web.collect_web
+python -m research.evaluate_web
+python -m research.analyze_results
+```
 
-The pipeline additionally includes: `experiment_key`, `best_trial`, `run_id`, `confusion_matrix`.
+Generated artifacts include:
 
-Web test results (`evaluate_web.py`) additionally include: `test_type`, `num_samples`.
+- training metrics in `experiments/metrics/training_results.csv`,
+- web evaluation results in `experiments/web_test_results/results.csv`,
+- plots, summaries, and comparison outputs in `experiments/results/`,
+- trained models in `saved_models/`,
+- MLflow data in `mlruns/` and `mlflow.db` when tracking is enabled.
 
-### Output file locations
+Full reproduction can take a long time and may require significant compute resources. For evaluation, the shorter verification path is to inspect saved artifacts and run the backend plus extension demo.
 
-| File | Created by |
-|---|---|
-| `experiments/metrics/training_results.csv` | `research/train_models.py` |
-| `experiments/predictions/{dataset}/*.csv` | Training pipeline (per-experiment predictions) |
-| `experiments/web_test_results/results.csv` | `research/evaluate_web.py` |
-| `experiments/results/{dataset}/` | `research/analyze_results.py` |
-| `experiments/results/all/` | `research/analyze_results.py` |
-| `experiments/hyperparams/{dataset}/*.json` | Training pipeline (best Optuna params) |
-| `experiments/trial_history/{dataset}/*.csv` | Training pipeline (Optuna trial history) |
-
----
-
-## MLflow Tracking
-
-The full pipeline logs all runs to MLflow. To view the UI:
+MLflow UI:
 
 ```bash
 mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
 
-Then open [http://localhost:5000](http://localhost:5000) in your browser.
+Open `http://localhost:5000` to inspect recorded runs.
 
-The UI shows per-run metrics, hyperparameters, tags, and a comparison view across all experiments.
+## Tests
 
----
+Backend tests:
 
+```bash
+python -m pytest tests/backend
+```
 
-## Models & Embeddings Reference
+Extension tests:
 
-### Classical ML models
+```bash
+cd tests/extension
+npm test
+```
 
-| Key | Algorithm |
-|---|---|
-| `svm` | Support Vector Machine (LinearSVC + calibrated probabilities) |
-| `lr` | Logistic Regression |
-| `rf` | Random Forest |
-| `dt` | Decision Tree |
-| `xgb` | XGBoost |
-| `nb` | Naive Bayes (Gaussian) |
-| `mnb` | Multinomial Naive Bayes |
-| `knn` | K-Nearest Neighbours |
+Current automated test coverage checks:
 
-### Deep learning models
-
-| Key | Architecture |
-|---|---|
-| `lstm` | LSTM (unidirectional) |
-| `gru` | GRU |
-| `bilstm` | Bidirectional LSTM |
-| `cnn` | 1-D Convolutional Neural Network |
-
-Deep learning models receive raw (pre-cleaned) text; word vectors are loaded internally.
-
-### Transformer models
-
-| Key | Pretrained checkpoint |
-|---|---|
-| `bert` | `bert-base-uncased` |
-| `roberta` | `roberta-base` |
-| `distilbert` | `distilbert-base-uncased` |
-| `fakebert` | `bert-base-uncased` (domain-tuned variant) |
-
-Transformer models use light preprocessing (whitespace normalisation only) and tokenise text internally via HuggingFace Tokenizers.
-
-### Supported embeddings
-
-| Key | Method | Used with |
-|---|---|---|
-| `tfidf` | TF-IDF | Classical ML |
-| `bow` | Bag of Words | Classical ML |
-| `word2vec` | Word2Vec (average pooling) | Classical ML, DL |
-| `glove` | GloVe (average pooling) | Classical ML, DL |
-| `bert-base-uncased` | BERT tokeniser | `bert`, `fakebert` |
-| `roberta-base` | RoBERTa tokeniser | `roberta` |
-| `distilbert-base-uncased` | DistilBERT tokeniser | `distilbert` |
-
-Not all model × embedding combinations are valid. The `ModelFactory` validates compatibility automatically and raises an error on mismatches.
-
----
-
-## Smart Routing Logic
-
-The API selects the best available model based on the word count of the input text. The routing rules are derived from the data-driven recommendation analysis (test set + web evaluation):
-
-| Word count | Model name | Dataset | Classifier | Embedding |
-|---|---|---|---|---|
-| < 30 words | `short_text` | WELFake | XGBoost | TF-IDF |
-| 30–100 words | `general` | ISOT | Random Forest | Bag of Words |
-| > 100 words | `long_article` | LIAR | BiLSTM | GloVe |
-
-If the preferred model is not loaded, the API falls back to `general` or the first available model.
-
----
+- backend health, prediction routing, validation, and error paths,
+- extension API request handling,
+- extension popup flow,
+- extension result rendering and error display.
 
 ## Docker
 
-The project includes Docker support for reproducible deployment and experimentation.
-
-### Prerequisites
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
-
-### Files overview
-
-| File | Purpose |
-|---|---|
-| `Dockerfile` | FastAPI prediction API (includes only the 3 models the API uses) |
-| `Dockerfile.research` | Training pipeline, MLflow UI, web evaluation |
-| `docker-compose.yml` | Orchestrates all services |
-| `.dockerignore` | Keeps images small by excluding data, models, and caches |
-
-### Quick start — API only
+Run the API:
 
 ```bash
-# Build and start the prediction API
-docker-compose up api
-
-# API is now available at http://localhost:8000
-# Swagger docs at      http://localhost:8000/docs
+docker compose up api
 ```
 
-### Start API + MLflow UI
+Run the API and MLflow UI:
 
 ```bash
-docker-compose up api mlflow
-
-# API    → http://localhost:8000
-# MLflow → http://localhost:5000
+docker compose up api mlflow
 ```
 
-### Run training pipeline
+Run the training service:
 
 ```bash
-# Make sure datasets are in research/configs/datasets/processed/
-docker-compose --profile training run train
+docker compose --profile training run train
 ```
 
-Training results, models, and databases are written back to your host machine via Docker volumes.
+## Limitations
 
-### Rebuild after code changes
+- Full model training is resource-intensive and may require GPU acceleration for deep learning and transformer models.
+- Raw datasets are external and require manual download.
+- The Chrome extension expects the backend at `http://127.0.0.1:8000`.
+- Prediction quality depends on the available trained model artifacts.
+- If model artifacts are missing, the API health endpoint reports a degraded state and prediction requests return `503`.
 
-```bash
-docker-compose build api          # rebuild API image only
-docker-compose build              # rebuild all images
-docker-compose up --build api     # rebuild + start in one step
-```
+## Demo Video
 
-### Stop everything
+A short screen recording of the Chrome extension working.
 
-```bash
-docker-compose down
-```
+![Demo video](demo.gif)
 
----
-
-
-## Additional Resources
-
-- **Key Papers & References**
-  - [ISOT Dataset](https://www.uvic.ca/engineering/ece/isot/datasets/)
-  - [LIAR Dataset](https://www.cs.ucsb.edu/~william/data/liar_dataset.zip)
-  - [WELFake Dataset](https://zenodo.org/record/4561253)
-  - [Optuna Documentation](https://optuna.org/)
-  - [MLflow Documentation](https://mlflow.org/)
-
-- **Tools & Libraries**
-  - [Hydra Configuration](https://hydra.cc/)
-  - [FastAPI](https://fastapi.tiangolo.com/)
-  - [Scikit-learn](https://scikit-learn.org/)
-  - [HuggingFace Transformers](https://huggingface.co/transformers/)
-  - [PyTorch](https://pytorch.org/)
-
----
-
-## Contributing
-
-1. Fork the repository and create a feature branch from `develop`
-2. Follow the existing code style (typed hints, consistent CSV schema)
-3. Add or update tests if applicable
-4. Open a pull request targeting the `develop` branch
