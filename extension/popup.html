@@ -1,51 +1,46 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fake News Detector</title>
-    <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fake News Detector</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    
-    <header>
-        <img src="icon.png" alt="Logo" class="logo">
-        <h1>FAKE NEWS DETECTOR</h1>
-    </header>
+  <header>
+    <img src="icon.png" alt="Fake News Detector logo" class="logo">
+    <h1>FAKE NEWS DETECTOR</h1>
+  </header>
 
-    <main class="container">
+  <main class="container">
     <div class="status-box" id="statusBox">
-        Select text on any webpage to analyze its credibility.
+      Select text on any webpage to analyze its credibility.
     </div>
 
-    <button id="analyzeBtn">
-        Analyze Selection
-    </button>
+    <button id="analyzeBtn" type="button">Analyze Selection</button>
 
-    <div id="resultArea" class="result-card hidden">
-        <div class="result-header">
-            <div id="resultIcon" style="font-size: 40px; margin-bottom: 10px;"></div>
-            <span class="label" id="predictionLabel">--</span>
+    <div id="resultArea" class="result-card hidden" role="status" aria-live="polite">
+      <div class="result-header">
+        <div id="resultIcon" class="result-icon"></div>
+        <span class="label" id="predictionLabel">--</span>
+      </div>
+      <div class="result-body">
+        <div class="metric">
+          <span class="metric-label">AI Confidence</span>
+          <span class="metric-value" id="confidenceScore">0%</span>
         </div>
-        
-        <div class="result-body">
-            <div class="metric">
-                <span class="metric-label">AI Confidence</span>
-                <span class="metric-value" id="confidenceScore">0%</span>
-            </div>
-            <div class="progress-bg">
-                <div class="progress-fill" id="confidenceBar" style="width: 0%"></div>
-            </div>
-            
-            <div class="model-info">
-                Analyzed by: <span id="modelName">--</span>
-            </div>
+        <div class="progress-bg">
+          <div class="progress-fill" id="confidenceBar"></div>
         </div>
+        <div class="model-info">
+          Analyzed by: <span id="modelName">--</span>
+        </div>
+      </div>
     </div>
-    <div id="errorMsg" class="error hidden"></div>
-    </main>
 
-    <script src="popup.js"></script>
+    <div id="errorMsg" class="error hidden" role="alert"></div>
+  </main>
+
+  <script type="module" src="popup.js"></script>
 </body>
 </html>

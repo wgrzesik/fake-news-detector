@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Fake News Detector",
-  "version": "1.0",
-  "description": "Analyzes selected text for Fake News.",
+  "version": "1.0.0",
+  "description": "Analyzes selected text on any webpage and classifies it as real or fake news.",
   "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["http://127.0.0.1:8000/*"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

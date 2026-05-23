@@ -1,83 +1,63 @@
-document.getElementById('analyzeBtn').addEventListener('click', async () => {
-    const statusBox = document.getElementById('statusBox');
-    const resultArea = document.getElementById('resultArea');
-    const errorMsg = document.getElementById('errorMsg');
-    
-    resultArea.classList.add('hidden');
-    errorMsg.classList.add('hidden');
-    statusBox.textContent = "Fetching text...";
-
-    let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-    chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        function: getSelectionText,
-    }, async (results) => {
-        const selectedText = results[0].result;
-
-        if (!selectedText || selectedText.trim().length < 10) {
-            statusBox.textContent = "Please select a longer text fragment (min. 10 characters).";
-            return;
-        }
-
-        statusBox.textContent = "Analyzing...";
-
-        try {
-            const response = await fetch('http://127.0.0.1:8000/predict', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: selectedText })
-            });
-
-            if (!response.ok) {
-                throw new Error("Server error: " + response.status);
-            }
-
-            const data = await response.json();
-            
-            displayResult(data);
-            statusBox.textContent = "Analysis complete.";
-
-        } catch (error) {
-            console.error(error);
-            errorMsg.textContent = "Could not connect to the API. Did you start 'api.py'?";
-            errorMsg.classList.remove('hidden');
-            statusBox.textContent = "Error.";
-        }
-    });
-});
+import { CONFIG, MESSAGES } from './config.js';
+import { analyzeText, truncateText, ApiError } from './api.js';
+import {
+  getElements,
+  setStatus,
+  showError,
+  hideTransientPanels,
+  renderResult,
+} from './ui.js';
 
 function getSelectionText() {
-    return window.getSelection().toString();
+  return window.getSelection().toString();
 }
 
-function displayResult(data) {
-    const resultArea = document.getElementById('resultArea');
-    const labelDiv = document.getElementById('predictionLabel');
-    const confidenceSpan = document.getElementById('confidenceScore');
-    const modelSpan = document.getElementById('modelName');
-    const progressBar = document.getElementById('confidenceBar'); 
-
-    labelDiv.textContent = data.label;
-    
-    labelDiv.className = 'label'; 
-    progressBar.className = 'progress-fill';
-
-    if (data.label === 'REAL') {
-        labelDiv.classList.add('real');
-        progressBar.style.backgroundColor = '#27AE60';
-    } else {
-        labelDiv.classList.add('fake');
-        progressBar.style.backgroundColor = '#D32F2F';
-    }
-
-    const percentage = (data.score * 100).toFixed(1) + '%';
-    confidenceSpan.textContent = percentage;
-    
-    progressBar.style.width = percentage; 
-
-    const routerInfo = data.router_info ? ` | ${data.router_info}` : '';
-    modelSpan.textContent = `${data.model}${routerInfo}`;
-
-    resultArea.classList.remove('hidden');
+export async function readSelectedText(chromeApi = chrome) {
+  const [tab] = await chromeApi.tabs.query({ active: true, currentWindow: true });
+  const results = await chromeApi.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: getSelectionText,
+  });
+  return results?.[0]?.result ?? '';
 }
+
+export async function handleAnalyzeClick(els, deps = {}) {
+  const reader = deps.readSelectedText ?? readSelectedText;
+  const analyzer = deps.analyzeText ?? analyzeText;
+
+  hideTransientPanels(els);
+  setStatus(els, MESSAGES.FETCHING);
+
+  let selected;
+  try {
+    selected = truncateText(await reader());
+  } catch (e) {
+    showError(els, MESSAGES.API_DOWN);
+    setStatus(els, MESSAGES.ERROR);
+    return;
+  }
+
+  if (selected.length < CONFIG.MIN_TEXT_LENGTH) {
+    setStatus(els, MESSAGES.TOO_SHORT);
+    return;
+  }
+
+  setStatus(els, MESSAGES.ANALYZING);
+
+  try {
+    const data = await analyzer(selected);
+    renderResult(els, data);
+    setStatus(els, MESSAGES.DONE);
+  } catch (error) {
+    const text = error instanceof ApiError && error.message === 'timeout'
+      ? MESSAGES.TIMEOUT
+      : MESSAGES.API_DOWN;
+    showError(els, text);
+    setStatus(els, MESSAGES.ERROR);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const els = getElements();
+  els.analyzeBtn.addEventListener('click', () => handleAnalyzeClick(els));
+});
