@@ -54,7 +54,6 @@ The preprocessing script:
 - validates rows and removes entries with missing text,
 - creates clean files with consistent `text` and `label` columns,
 - saves processed files under `research/configs/datasets/processed/`,
-- optionally cleans ISOT data to reduce Reuters leakage using `clean_isot.py`.
 
 Expected raw dataset layout:
 
