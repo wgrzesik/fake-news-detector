@@ -281,6 +281,14 @@ Run the training service:
 docker compose --profile training run train
 ```
 
+## Documentation
+
+Project documentation is split into:
+
+- User documentation: this `README.md`,
+- Architecture  documentation: `docs/architecture.md`.
+- Maintenance documentation: `docs/maintenance.md`.
+
 ## Limitations
 
 - Full model training is resource-intensive and may require GPU acceleration for deep learning and transformer models.
@@ -294,4 +302,3 @@ docker compose --profile training run train
 A short screen recording of the Chrome extension working.
 
 ![Demo video](demo.gif)
-
