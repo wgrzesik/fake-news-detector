@@ -97,13 +97,6 @@ The main local runtime consists of:
 - Google Chrome with the unpacked extension loaded from `extension/`,
 - optional Node.js dependencies under `tests/extension` for extension tests.
 
-Optional deployment and reproducibility paths:
-
-- `docker compose up api` starts the prediction API in Docker,
-- `docker compose up api mlflow` starts the API and MLflow UI,
-- `docker compose --profile training run train` runs the training service,
-- `fake_news_detector.ipynb` supports running the research workflow in Google Colab with Google Drive persistence.
-
 Full training can require more memory, disk space, and GPU acceleration. The lightweight demonstration only requires the local backend, saved model artifacts, and the Chrome extension.
 
 ## Changes from Initial Assumptions
