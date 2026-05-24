@@ -11,8 +11,6 @@ import pandas as pd
 OUTPUT_DIRS = [
     "saved_models",
     "experiments",
-    "mlruns",
-    "mlartifacts",
     "outputs",
     "research/configs/web_scraped_data",
 ]
@@ -185,7 +183,7 @@ def _print_resume_status(drive: Path) -> None:
             except Exception:
                 print(f"{meta_path} (could not parse)")
     else:
-        print("  ℹ️  No in-progress transformer checkpoints.")
+        print("No in-progress transformer checkpoints.")
 
     # Web scraped data
     web_dir = drive / "research" / "configs" / "web_scraped_data"
