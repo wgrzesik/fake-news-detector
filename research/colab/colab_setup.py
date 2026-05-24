@@ -162,7 +162,7 @@ def _print_resume_status(drive: Path) -> None:
         except Exception as e:
             print(f"Could not read results CSV: {e}")
     else:
-        print("  ℹ️  No completed experiments yet (first run).")
+        print("No completed experiments yet (first run).")
 
     # In-progress transformer checkpoints
     ckpt_pattern = str(drive / "saved_models" / "**" / "checkpoints" / "ckpt_latest" / "meta.json")

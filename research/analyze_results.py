@@ -561,12 +561,12 @@ def plot_cross_text_type_comparison(
 def main() -> None:
     """Entry point – orchestrates the full analysis pipeline."""
 
-    # ── 1. Load training results ──────────────────────────────────────────
+    # 1. Load training results
     print("[1/5] Loading training data...")
     df_train = load_data(TRAINING_CSV)
     print(f"  Training results: {len(df_train)} models")
 
-    # ── 2. Load per-text-type web results ────────────────────────────────
+    # 2. Load per-text-type web results
     print(f"\n[2/5] Loading web results for text types: {TEXT_TYPES}...")
     web_dfs: dict[str, pd.DataFrame] = {}
     for text_type in TEXT_TYPES:
@@ -580,7 +580,7 @@ def main() -> None:
     if not web_dfs:
         print("\n  [Warning] No web result files found. Only training analysis will run.")
 
-    # ── 3. Per text-type analysis ────────────────────────────────────────
+    # 3. Per text-type analysis
     step = 3
     for text_type, df_web in web_dfs.items():
         print(f"\n[{step}/5] Analysis for text_type='{text_type}'...")
@@ -601,9 +601,9 @@ def main() -> None:
 
             result = run_analysis_pipeline(dt, dw, ds_dir, subset_label=f"{ds_label}_{text_type}")
             if result is None:
-                print(f"    ! No common models to compare for dataset '{ds}'.")
+                print(f"! No common models to compare for dataset '{ds}'.")
             else:
-                print(f"    OK  Results saved to: {ds_dir}")
+                print(f"OK  Results saved to: {ds_dir}")
 
         # Global (all datasets combined)
         all_dir = RESULTS_DIR / text_type / "all"
@@ -615,7 +615,7 @@ def main() -> None:
         else:
             print(f"  OK  Global results saved to: {all_dir}")
 
-    # ── 4. Training-only analysis (no web data needed) ───────────────────
+    # 4. Training-only analysis (no web data needed)
     print(f"\n[4/5] Training-only ranking...")
     train_dir = RESULTS_DIR / "training"
     train_dir.mkdir(parents=True, exist_ok=True)
@@ -623,7 +623,7 @@ def main() -> None:
         compare_within(df_train, label="training", output_dir=train_dir)
         print(f"  OK  Saved to: {train_dir}")
 
-    # ── 5. Cross-text-type comparison ────────────────────────────────────
+    # 5. Cross-text-type comparison
     if len(web_dfs) > 1:
         print(f"\n[5/5] Cross-text-type comparison...")
         cross_dir = RESULTS_DIR / "cross_text_type"

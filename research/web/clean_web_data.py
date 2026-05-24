@@ -1,21 +1,3 @@
-"""
-Clean web-scraped news data and split into per-text-type CSVs.
-
-Removes:
-- Non-English articles (using langdetect)
-- Unicode artifacts (ZWNBSP, zero-width chars, replacement chars, etc.)
-- Duplicate articles (by URL and by text content)
-- Articles with insufficient text length
-
-Produces three CSVs in the output directory (default: web_scraped_data/processed/):
-- web_title.csv       (article titles)
-- web_text.csv        (full article text)
-- web_short_text.csv  (RSS summary / short descriptions)
-
-Usage:
-    python -m research.web.clean_web_data [--input PATH] [--output-dir DIR] [--min-length 100]
-"""
-
 import argparse
 import html
 import re
@@ -175,17 +157,6 @@ def clean_web_data(
     4. Filter articles where 'text' column < min_text_length
        (Note: 'title' and 'short_text' have no length constraints)
     5. Filter non-English articles
-
-    Args:
-        df: Input DataFrame with 'text' and 'label' columns.
-        min_text_length: Minimum 'text' column length to keep (default: 100).
-                        Does NOT apply to 'title' or 'short_text' columns.
-        filter_non_english: Whether to remove non-English articles.
-        remove_dups: Whether to remove duplicate articles.
-        show_progress: Whether to show progress bars.
-
-    Returns:
-        Cleaned DataFrame.
     """
     print(f"\n{'='*60}")
     print("CLEANING WEB-SCRAPED DATA")

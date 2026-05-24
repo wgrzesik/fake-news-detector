@@ -436,7 +436,7 @@ def main(cfg: DictConfig):
                 # Skip already-completed experiments (resume after Colab disconnect)
                 experiment_key = f"{dataset_name}_{model_name}_{embedding_name}"
                 if experiment_key in completed_keys:
-                    print(f"  ⏭️ SKIP (already completed) — {experiment_key}")
+                    print(f"SKIP (already completed) — {experiment_key}")
                     continue
 
                 is_transformer = ModelFactory.is_transformer_model(model_name)
@@ -740,7 +740,6 @@ def print_final_summary(tracking_mgr, failed_experiments, total_combinations):
         print(f"\nAll {total_combinations} experiments completed successfully!")
 
     print(f"\n[Results Location]")
-    print(f"MLflow UI: mlflow ui --backend-store-uri '{tracking_mgr.local_storage}/mlruns'")
     print(f"Summary CSV: {tracking_mgr.metrics_dir / 'training_results.csv'}")
     print(f"All files: {tracking_mgr.local_storage}")
     print(f"\n{'='*100}\n")
