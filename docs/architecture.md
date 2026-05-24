@@ -484,18 +484,19 @@ The workflow is organized into three phases:
 
 The notebook sections are:
 
-1. Configuration.
-2. Mount Google Drive.
-3. Clone or update repository.
-4. Install dependencies.
-5. Create Drive folders.
-6. Upload raw datasets and embeddings.
-7. Validate and preprocess datasets.
-8. Configure project symlinks between Colab and Drive.
-9. Train models.
-10. Collect web data.
-11. Evaluate on web data.
-12. Analyze results.
+1. Configuration
+2. Mount Google Drive
+3. Clone or update repository
+4. Install dependencies
+5. Create Drive folders
+6. Upload raw datasets and embeddings
+7. Validate and preprocess datasets
+8. Configure project symlinks (Drive ↔ project)
+9. Train models
+10. Collect web data
+11. Clean web data
+12. Evaluate on web data
+13. Analyze results
 
 Google Drive is expected to contain the input data:
 

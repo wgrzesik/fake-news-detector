@@ -245,18 +245,19 @@ The recommended way to execute the full research pipeline is through `fake_news_
 
 The notebook walks through the complete research workflow:
 
-1. Configure repository, branch, project path, and Drive path.
-2. Mount Google Drive.
-3. Clone or update the repository in the Colab runtime.
-4. Install project dependencies.
-5. Create the required Drive folders.
-6. Upload raw datasets and the GloVe embedding file.
-7. Validate inputs and preprocess datasets.
-8. Configure project symlinks between Colab and Drive.
-9. Train models.
-10. Collect web data.
-11. Evaluate trained models on web data.
-12. Analyze and export results.
+1. Configuration
+2. Mount Google Drive
+3. Clone or update repository
+4. Install dependencies
+5. Create Drive folders
+6. Upload raw datasets and embeddings
+7. Validate and preprocess datasets
+8. Configure project symlinks (Drive ↔ project)
+9. Train models
+10. Collect web data
+11. Clean web data
+12. Evaluate on web data
+13. Analyze results
 
 ## Tests
 
