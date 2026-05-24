@@ -108,14 +108,13 @@ Full training can require more memory, disk space, and GPU acceleration. The lig
 
 ## Changes from Initial Assumptions
 
-During development, the project evolved from a pure research pipeline into a complete demonstration system. Important architectural changes include:
+During development, several initial assumptions were refined based on experimental findings. These changes reflect the transition from controlled dataset evaluation to a more robust research pipeline that can test generalization on real-world text.
 
-- adding a FastAPI backend so trained models can be used outside notebooks and scripts,
-- adding a Chrome extension to demonstrate real-time prediction on selected webpage text,
-- introducing smart routing so different text lengths can use different model configurations,
-- adding web-scraped evaluation to test generalization beyond the original benchmark datasets,
-- separating concise setup instructions in `README.md` from detailed architecture and maintenance documentation in `docs/`,
-- adding automated tests for backend routing and extension logic.
+| Initial assumption | Reality | Mitigation strategy |
+|---|---|---|
+| Training results were sufficient for judging model quality. | High metrics on internal test splits suggested exceptional performance, but also masked possible overfitting to dataset-specific artifacts. | Added a web-scraped evaluation phase to test generalization on truly out-of-distribution data. |
+| Short scraped excerpts would provide enough input features for all classification tasks. | The project datasets have very different text-length profiles, from short claims to full news articles. | Expanded the evaluation pipeline to compare titles, excerpts, and full articles. |
+| Hyperparameters could be tuned effectively through manual trial and error. | Manual tuning was slow, inconsistent, and difficult to reproduce across many model/dataset/embedding combinations. | Implemented automated configuration and optimization with Hydra and Optuna, using `TPESampler` and `MedianPruner`. |
 
 ## Research Pipeline
 
