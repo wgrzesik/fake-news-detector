@@ -12,32 +12,32 @@ The project has three main layers:
 
 ```text
 Raw Datasets (ISOT, LIAR, WELFake)
-        â”‚
-        â–Ľ
+        │
+        ▼
 Dataset Preprocessing (research/preprocess_datasets.py)
-        â”‚
-        â–Ľ
+        │
+        ▼
 Processed train/test/validation splits
-        â”‚
-        â–Ľ
+        │
+        ▼
 Text Preprocessing (TextPreprocessor)
-        â”‚
-        â–Ľ
+        │
+        ▼
 Embedding or tokenizer stage
-        â”‚
-        â–Ľ
+        │
+        ▼
 Model training and Optuna optimization (research/train_models.py)
-        â”‚
-        â–Ľ
+        │
+        ▼
 Evaluation and tracking (tracking_manager.py, evaluate_web.py)
-        â”‚
-        â–Ľ
+        │
+        ▼
 saved_models/
-        â”‚
-        â–Ľ
+        │
+        ▼
 FastAPI backend (backend/api.py)
-        â”‚
-        â–Ľ
+        │
+        ▼
 Chrome extension (extension/)
 ```
 
@@ -136,15 +136,15 @@ Expected raw dataset layout:
 
 ```text
 research/
-â”śâ”€â”€ ISOT/
-â”‚   â”śâ”€â”€ True.csv
-â”‚   â””â”€â”€ Fake.csv
-â”śâ”€â”€ LIAR/
-â”‚   â”śâ”€â”€ train.tsv
-â”‚   â”śâ”€â”€ test.tsv
-â”‚   â””â”€â”€ valid.tsv
-â””â”€â”€ WELFake/
-    â””â”€â”€ data.csv
+├── ISOT/
+│   ├── True.csv
+│   └── Fake.csv
+├── LIAR/
+│   ├── train.tsv
+│   ├── test.tsv
+│   └── valid.tsv
+└── WELFake/
+    └── data.csv
 ```
 
 Run preprocessing from the repository root:
@@ -157,18 +157,18 @@ Processed output layout:
 
 ```text
 research/configs/datasets/processed/
-â”śâ”€â”€ isot/
-â”‚   â”śâ”€â”€ train.csv
-â”‚   â”śâ”€â”€ test.csv
-â”‚   â””â”€â”€ val.csv
-â”śâ”€â”€ liar/
-â”‚   â”śâ”€â”€ train.csv
-â”‚   â”śâ”€â”€ test.csv
-â”‚   â””â”€â”€ val.csv
-â””â”€â”€ welfake/
-    â”śâ”€â”€ train.csv
-    â”śâ”€â”€ test.csv
-    â””â”€â”€ val.csv
+├── isot/
+│   ├── train.csv
+│   ├── test.csv
+│   └── val.csv
+├── liar/
+│   ├── train.csv
+│   ├── test.csv
+│   └── val.csv
+└── welfake/
+    ├── train.csv
+    ├── test.csv
+    └── val.csv
 ```
 
 Each processed file contains:
@@ -303,9 +303,9 @@ Typical output files are written to `experiments/web_test_results/`:
 
 ```text
 experiments/web_test_results/
-â”śâ”€â”€ results_title.csv
-â”śâ”€â”€ results_text.csv
-â””â”€â”€ results_short_text.csv
+├── results_title.csv
+├── results_text.csv
+└── results_short_text.csv
 ```
 
 Each result file uses the same core metrics as the training pipeline: accuracy, precision, recall, F1 score, inference time, and confusion matrix where available.
@@ -341,23 +341,23 @@ Main outputs are saved under `experiments/results/`:
 
 ```text
 experiments/results/
-â”śâ”€â”€ title/
-â”‚   â”śâ”€â”€ isot/
-â”‚   â”śâ”€â”€ liar/
-â”‚   â”śâ”€â”€ welfake/
-â”‚   â””â”€â”€ all/
-â”śâ”€â”€ text/
-â”‚   â”śâ”€â”€ isot/
-â”‚   â”śâ”€â”€ liar/
-â”‚   â”śâ”€â”€ welfake/
-â”‚   â””â”€â”€ all/
-â”śâ”€â”€ short_text/
-â”‚   â”śâ”€â”€ isot/
-â”‚   â”śâ”€â”€ liar/
-â”‚   â”śâ”€â”€ welfake/
-â”‚   â””â”€â”€ all/
-â”śâ”€â”€ training/
-â””â”€â”€ cross_text_type/
+├── title/
+│   ├── isot/
+│   ├── liar/
+│   ├── welfake/
+│   └── all/
+├── text/
+│   ├── isot/
+│   ├── liar/
+│   ├── welfake/
+│   └── all/
+├── short_text/
+│   ├── isot/
+│   ├── liar/
+│   ├── welfake/
+│   └── all/
+├── training/
+└── cross_text_type/
 ```
 
 Generated artifacts include:
