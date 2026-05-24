@@ -1,4 +1,4 @@
-# Architecture
+﻿# Architecture
 
 This document describes the main components of the Fake News Detector project and the flow of data from research datasets to the Chrome extension demo.
 
@@ -12,34 +12,110 @@ The project has three main layers:
 
 ```text
 Raw Datasets (ISOT, LIAR, WELFake)
-        │
-        ▼
+        â”‚
+        â–Ľ
 Dataset Preprocessing (research/preprocess_datasets.py)
-        │
-        ▼
+        â”‚
+        â–Ľ
 Processed train/test/validation splits
-        │
-        ▼
+        â”‚
+        â–Ľ
 Text Preprocessing (TextPreprocessor)
-        │
-        ▼
+        â”‚
+        â–Ľ
 Embedding or tokenizer stage
-        │
-        ▼
+        â”‚
+        â–Ľ
 Model training and Optuna optimization (research/train_models.py)
-        │
-        ▼
+        â”‚
+        â–Ľ
 Evaluation and tracking (tracking_manager.py, evaluate_web.py)
-        │
-        ▼
+        â”‚
+        â–Ľ
 saved_models/
-        │
-        ▼
+        â”‚
+        â–Ľ
 FastAPI backend (backend/api.py)
-        │
-        ▼
+        â”‚
+        â–Ľ
 Chrome extension (extension/)
 ```
+
+## Main Components
+
+The system is divided into the following components:
+
+| Component | Location | Responsibility |
+|---|---|---|
+| Dataset preprocessing | `research/preprocess_datasets.py` | Converts raw ISOT, LIAR, and WELFake files into normalized train/test/validation splits. |
+| Training pipeline | `research/train_models.py` | Trains models, runs Optuna experiments, and stores metrics and model artifacts. |
+| Web data collection | `research/web/collect_web.py` | Collects additional web news samples for generalization testing. |
+| Web evaluation | `research/evaluate_web.py` | Evaluates saved models on web-scraped text variants. |
+| Result analysis | `research/analyze_results.py` | Compares training and web metrics and generates reports, rankings, and plots. |
+| Tracking | `research/tracking/tracking_manager.py` | Stores metrics locally and in MLflow. |
+| Prediction API | `backend/api.py` | Loads selected models and exposes health and prediction endpoints. |
+| Chrome extension | `extension/` | Reads selected webpage text and displays prediction results. |
+| Tests | `tests/` | Verifies backend behavior and extension modules. |
+
+## Technologies Used
+
+The project uses:
+
+- Python for the research pipeline and backend,
+- FastAPI and Uvicorn for the prediction API,
+- Pydantic for request validation,
+- scikit-learn, XGBoost, PyTorch, and HuggingFace Transformers for model implementations,
+- Hydra and OmegaConf for experiment configuration,
+- Optuna for hyperparameter optimization,
+- MLflow and CSV files for experiment tracking,
+- pandas, NumPy, matplotlib, and seaborn for analysis and visualization,
+- Chrome Extension Manifest V3, JavaScript modules, HTML, and CSS for the browser extension,
+- Jest and jsdom for extension tests,
+- pytest for backend tests,
+- Docker and Docker Compose for optional containerized execution.
+
+## Component Communication
+
+The components communicate through files and HTTP:
+
+- The preprocessing step writes processed CSV files under `research/configs/datasets/processed/`.
+- The training pipeline reads processed CSV files and writes model artifacts to `saved_models/`.
+- Training and evaluation metrics are written to `experiments/` and optionally to MLflow.
+- Web scraping writes collected news data to the configured web data directory.
+- Web evaluation reads saved models and web-scraped data, then writes result CSV files to `experiments/web_test_results/`.
+- Result analysis reads training and web evaluation CSV files and writes summaries and plots to `experiments/results/`.
+- The FastAPI backend loads model artifacts from `saved_models/` during startup.
+- The Chrome extension sends selected webpage text to the backend using `POST http://127.0.0.1:8000/predict`.
+- The backend returns JSON containing `label`, `score`, and `meta`; the extension renders this response in the popup.
+
+## Runtime and Deployment Environment
+
+The main local runtime consists of:
+
+- a Python environment with dependencies from `requirements.txt`,
+- a FastAPI server started with `python backend/api.py`,
+- Google Chrome with the unpacked extension loaded from `extension/`,
+- optional Node.js dependencies under `tests/extension` for extension tests.
+
+Optional deployment and reproducibility paths:
+
+- `docker compose up api` starts the prediction API in Docker,
+- `docker compose up api mlflow` starts the API and MLflow UI,
+- `docker compose --profile training run train` runs the training service,
+- `fake_news_detector.ipynb` supports running the research workflow in Google Colab with Google Drive persistence.
+
+Full training can require more memory, disk space, and GPU acceleration. The lightweight demonstration only requires the local backend, saved model artifacts, and the Chrome extension.
+
+## Changes from Initial Assumptions
+
+During development, the project evolved from a pure research pipeline into a complete demonstration system. Important architectural changes include:
+
+- adding a FastAPI backend so trained models can be used outside notebooks and scripts,
+- adding a Chrome extension to demonstrate real-time prediction on selected webpage text,
+- introducing smart routing so different text lengths can use different model configurations,
+- adding web-scraped evaluation to test generalization beyond the original benchmark datasets,
+- separating concise setup instructions in `README.md` from detailed architecture and maintenance documentation in `docs/`,
+- adding automated tests for backend routing and extension logic.
 
 ## Research Pipeline
 
@@ -54,20 +130,21 @@ The preprocessing script:
 - validates rows and removes entries with missing text,
 - creates clean files with consistent `text` and `label` columns,
 - saves processed files under `research/configs/datasets/processed/`,
+- cleans ISOT data to reduce Reuters leakage during preprocessing.
 
 Expected raw dataset layout:
 
 ```text
 research/
-├── ISOT/
-│   ├── True.csv
-│   └── Fake.csv
-├── LIAR/
-│   ├── train.tsv
-│   ├── test.tsv
-│   └── valid.tsv
-└── WELFake/
-    └── data.csv
+â”śâ”€â”€ ISOT/
+â”‚   â”śâ”€â”€ True.csv
+â”‚   â””â”€â”€ Fake.csv
+â”śâ”€â”€ LIAR/
+â”‚   â”śâ”€â”€ train.tsv
+â”‚   â”śâ”€â”€ test.tsv
+â”‚   â””â”€â”€ valid.tsv
+â””â”€â”€ WELFake/
+    â””â”€â”€ data.csv
 ```
 
 Run preprocessing from the repository root:
@@ -80,18 +157,18 @@ Processed output layout:
 
 ```text
 research/configs/datasets/processed/
-├── isot/
-│   ├── train.csv
-│   ├── test.csv
-│   └── val.csv
-├── liar/
-│   ├── train.csv
-│   ├── test.csv
-│   └── val.csv
-└── welfake/
-    ├── train.csv
-    ├── test.csv
-    └── val.csv
+â”śâ”€â”€ isot/
+â”‚   â”śâ”€â”€ train.csv
+â”‚   â”śâ”€â”€ test.csv
+â”‚   â””â”€â”€ val.csv
+â”śâ”€â”€ liar/
+â”‚   â”śâ”€â”€ train.csv
+â”‚   â”śâ”€â”€ test.csv
+â”‚   â””â”€â”€ val.csv
+â””â”€â”€ welfake/
+    â”śâ”€â”€ train.csv
+    â”śâ”€â”€ test.csv
+    â””â”€â”€ val.csv
 ```
 
 Each processed file contains:
@@ -226,9 +303,9 @@ Typical output files are written to `experiments/web_test_results/`:
 
 ```text
 experiments/web_test_results/
-├── results_title.csv
-├── results_text.csv
-└── results_short_text.csv
+â”śâ”€â”€ results_title.csv
+â”śâ”€â”€ results_text.csv
+â””â”€â”€ results_short_text.csv
 ```
 
 Each result file uses the same core metrics as the training pipeline: accuracy, precision, recall, F1 score, inference time, and confusion matrix where available.
@@ -264,23 +341,23 @@ Main outputs are saved under `experiments/results/`:
 
 ```text
 experiments/results/
-├── title/
-│   ├── isot/
-│   ├── liar/
-│   ├── welfake/
-│   └── all/
-├── text/
-│   ├── isot/
-│   ├── liar/
-│   ├── welfake/
-│   └── all/
-├── short_text/
-│   ├── isot/
-│   ├── liar/
-│   ├── welfake/
-│   └── all/
-├── training/
-└── cross_text_type/
+â”śâ”€â”€ title/
+â”‚   â”śâ”€â”€ isot/
+â”‚   â”śâ”€â”€ liar/
+â”‚   â”śâ”€â”€ welfake/
+â”‚   â””â”€â”€ all/
+â”śâ”€â”€ text/
+â”‚   â”śâ”€â”€ isot/
+â”‚   â”śâ”€â”€ liar/
+â”‚   â”śâ”€â”€ welfake/
+â”‚   â””â”€â”€ all/
+â”śâ”€â”€ short_text/
+â”‚   â”śâ”€â”€ isot/
+â”‚   â”śâ”€â”€ liar/
+â”‚   â”śâ”€â”€ welfake/
+â”‚   â””â”€â”€ all/
+â”śâ”€â”€ training/
+â””â”€â”€ cross_text_type/
 ```
 
 Generated artifacts include:
@@ -368,7 +445,7 @@ User flow:
 2. The user opens the extension popup and clicks `Analyze Selection`.
 3. `popup.js` reads the selected text using `window.getSelection()`.
 4. `api.js` sends the text to `http://127.0.0.1:8000/predict`.
-5. `ui.js` renders the returned `REAL`, `FAKE`, or `NEUTRAL` label, confidence score, and model metadata.
+5. `ui.js` renders the returned `REAL` or `FAKE` label, confidence score, and model metadata.
 
 ## Research Workflow Commands
 
@@ -405,15 +482,39 @@ Then open `http://localhost:5000`.
 
 ## Google Colab Workflow
 
-The repository includes `fake_news_detector.ipynb` for running the training workflow on Google Colab with Google Drive persistence. This is useful for long-running or GPU-backed experiments.
+`fake_news_detector.ipynb` is the recommended execution environment for the full research pipeline. The notebook treats the Colab runtime as disposable compute and Google Drive as persistent storage. This keeps long-running research artifacts available after Colab disconnects, while still allowing the project code to run from a freshly cloned repository.
 
-Typical notebook flow:
+The workflow is organized into three phases:
 
-1. Mount Google Drive.
-2. Clone or update the repository.
-3. Link Drive folders for datasets, models, and experiment outputs.
+1. Environment setup: configure paths, mount Drive, clone or update the repository, and install dependencies.
+2. Data preparation: create the expected Drive folders, upload raw datasets and GloVe embeddings, validate all required files, preprocess datasets, and copy processed splits back to Drive.
+3. Research execution: link project paths to Drive, train models, collect web data, evaluate trained models on web data, and generate analysis outputs.
+
+The notebook sections are:
+
+1. Configuration.
+2. Mount Google Drive.
+3. Clone or update repository.
 4. Install dependencies.
-5. Run preprocessing, training, web evaluation, and result analysis.
+5. Create Drive folders.
+6. Upload raw datasets and embeddings.
+7. Validate and preprocess datasets.
+8. Configure project symlinks between Colab and Drive.
+9. Train models.
+10. Collect web data.
+11. Evaluate on web data.
+12. Analyze results.
+
+Google Drive is expected to contain the input data:
+
+- raw datasets under `/content/drive/MyDrive/fake-news-results/datasets/raw/{ISOT,LIAR,WELFake}/`,
+- GloVe embeddings under `/content/drive/MyDrive/fake-news-results/datasets/embeddings/`, at minimum `glove.6B.100d.txt`.
+
+During preprocessing, the notebook temporarily links raw dataset folders into the project layout expected by `research.preprocess_datasets`.
+
+Generated `train.csv`, `test.csv`, and `val.csv` files are copied back to `datasets/processed/` in Drive.
+
+After preprocessing, `research.colab.colab_setup` creates symlinks from the Colab project checkout to persistent Drive locations for processed datasets, embeddings, web-scraped data, saved models, experiment outputs, MLflow files, and resume checkpoints. This means later stages can use normal project-relative paths while Drive stores the durable data.
 
 Outputs are written back to Drive so interrupted Colab sessions can be resumed.
 

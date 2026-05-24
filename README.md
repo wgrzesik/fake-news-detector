@@ -1,4 +1,4 @@
-# Fake News Detector
+﻿# Fake News Detector
 
 ## Project Goal
 
@@ -31,55 +31,54 @@ The main deliverables are:
 
 ```text
 fake-news-detector/
-├── backend/                          # FastAPI server with smart model routing
-│   └── api.py                        
-├── extension/                        # Chrome Extension
-│   ├── manifest.json
-│   ├── popup.html
-│   ├── popup.js
-│   ├── api.js
-│   ├── ui.js
-│   ├── popup.js
-│   └── styles.css
-├── research/
-│   ├── preprocess_datasets.py        # Dataset preprocessing (train/test/val splits)
-│   ├── train_models.py               # Hydra/Optuna training pipeline (main entry point)
-│   ├── evaluate_web.py               # CLI: test trained models on web-scraped data
-│   ├── analyze_results.py            # Analysis & visualisation of training vs web results
-│   ├── clean_isot.py                 # ISOT Reuters leakage removal
-│   ├── configs/
-│   │   ├── config.yaml               # Hydra config (datasets, models, embeddings, Optuna, MLflow)
-│   │   ├── embeddings/               # Embedding implementations (TF-IDF, BoW, Word2Vec, GloVe)
-│   │   ├── models/                   # Model wrappers & factory (SVM, LR, RF, XGB, …)
-│   │   ├── preprocessing/            # Text preprocessing (TextPreprocessor)
-│   │   └── datasets/processed/       # Preprocessed datasets (train/test/val splits)
-│   ├── tracking/
-│   │   └── tracking_manager.py       # Hybrid CSV + MLflow tracking manager
-│   ├── web/
-│   │   ├── collect_web.py            # CLI: collect/simulate web-scraped articles
-│   │   ├── web_scraper.py            # News source definitions & RSS collector
-│   │   └── evaluator.py              # WebTestEvaluator class
-│   ├── colab/                        # Google Colab integration
-│   │   ├── colab_config.py           # Colab-specific configuration
-│   │   └── colab_secrets.json        # Colab secrets (GitHub token, paths)
-│   └── data/                         # Raw datasets (gitignored)
-├── experiments/                      # Generated output directory (gitignored data, skeleton tracked)
-│   ├── metrics/                      # training_results.csv from training pipeline
-│   ├── predictions/                  # Per-experiment prediction CSVs
-│   ├── web_test_results/             # Web testing CSVs and reports
-│   ├── hyperparams/                  # Best Optuna hyperparameters (JSON)
-│   ├── trial_history/                # Optuna trial history CSVs
-│   └── results/                      # Visualisation outputs
-├── tests/                            
-│   ├── backend/                      # Tests for backend
-│   ├── extension/                    # Jest tests for extension modules
-├── saved_models/                     # Serialised models (.joblib, .pkl) — gitignored
-├── requirements.txt
-├── README.md
-├── docker-compose.yml
-├── Dockerfile                        # API container
-├── Dockerfile.research               # Training/research container
-└── fake_news_detector.ipynb          # Google Colab notebook
+â”śâ”€â”€ backend/                          # FastAPI server with smart model routing
+â”‚   â””â”€â”€ api.py                        
+â”śâ”€â”€ extension/                        # Chrome Extension
+â”‚   â”śâ”€â”€ manifest.json
+â”‚   â”śâ”€â”€ popup.html
+â”‚   â”śâ”€â”€ popup.js
+â”‚   â”śâ”€â”€ api.js
+â”‚   â”śâ”€â”€ ui.js
+â”‚   â”śâ”€â”€ popup.js
+â”‚   â””â”€â”€ styles.css
+â”śâ”€â”€ research/
+â”‚   â”śâ”€â”€ preprocess_datasets.py        # Dataset preprocessing, splits, and ISOT Reuters cleanup
+â”‚   â”śâ”€â”€ train_models.py               # Hydra/Optuna training pipeline (main entry point)
+â”‚   â”śâ”€â”€ evaluate_web.py               # CLI: test trained models on web-scraped data
+â”‚   â”śâ”€â”€ analyze_results.py            # Analysis & visualisation of training vs web results
+â”‚   â”śâ”€â”€ configs/
+â”‚   â”‚   â”śâ”€â”€ config.yaml               # Hydra config (datasets, models, embeddings, Optuna, MLflow)
+â”‚   â”‚   â”śâ”€â”€ embeddings/               # Embedding implementations (TF-IDF, BoW, Word2Vec, GloVe)
+â”‚   â”‚   â”śâ”€â”€ models/                   # Model wrappers & factory (SVM, LR, RF, XGB, â€¦)
+â”‚   â”‚   â”śâ”€â”€ preprocessing/            # Text preprocessing (TextPreprocessor)
+â”‚   â”‚   â””â”€â”€ datasets/processed/       # Preprocessed datasets (train/test/val splits)
+â”‚   â”śâ”€â”€ tracking/
+â”‚   â”‚   â””â”€â”€ tracking_manager.py       # Hybrid CSV + MLflow tracking manager
+â”‚   â”śâ”€â”€ web/
+â”‚   â”‚   â”śâ”€â”€ collect_web.py            # CLI: collect/simulate web-scraped articles
+â”‚   â”‚   â”śâ”€â”€ web_scraper.py            # News source definitions & RSS collector
+â”‚   â”‚   â””â”€â”€ evaluator.py              # WebTestEvaluator class
+â”‚   â”śâ”€â”€ colab/                        # Google Colab integration
+â”‚   â”‚   â”śâ”€â”€ colab_setup.py            # Colab/Drive workspace linking and resume checks
+â”‚   â”‚   â””â”€â”€ colab_secrets.json.template # Optional template for private Colab config
+â”‚   â””â”€â”€ data/                         # Raw datasets (gitignored)
+â”śâ”€â”€ experiments/                      # Generated output directory (gitignored data, skeleton tracked)
+â”‚   â”śâ”€â”€ metrics/                      # training_results.csv from training pipeline
+â”‚   â”śâ”€â”€ predictions/                  # Per-experiment prediction CSVs
+â”‚   â”śâ”€â”€ web_test_results/             # Web testing CSVs and reports
+â”‚   â”śâ”€â”€ hyperparams/                  # Best Optuna hyperparameters (JSON)
+â”‚   â”śâ”€â”€ trial_history/                # Optuna trial history CSVs
+â”‚   â””â”€â”€ results/                      # Visualisation outputs
+â”śâ”€â”€ tests/                            
+â”‚   â”śâ”€â”€ backend/                      # Tests for backend
+â”‚   â”śâ”€â”€ extension/                    # Jest tests for extension modules
+â”śâ”€â”€ saved_models/                     # Serialised models (.joblib, .pkl) â€” gitignored
+â”śâ”€â”€ requirements.txt
+â”śâ”€â”€ README.md
+â”śâ”€â”€ docker-compose.yml
+â”śâ”€â”€ Dockerfile                        # API container
+â”śâ”€â”€ Dockerfile.research               # Training/research container
+â””â”€â”€ fake_news_detector.ipynb          # Google Colab notebook
 ```
 
 ## Installation and Configuration
@@ -184,9 +183,9 @@ The full raw datasets are not bundled in the repository because of size and lice
 
 Datasets used by the project:
 
-- ISOT Fake News Dataset: `https://www.uvic.ca/engineering/ece/isot/datasets/`
-- LIAR dataset: `https://www.cs.ucsb.edu/~william/data/liar_dataset.zip`
-- WELFake dataset: `https://zenodo.org/record/4561253`
+- ISOT Fake News Dataset: `https://www.kaggle.com/datasets/rmisra/news-category-dataset`
+- LIAR dataset: `https://www.kaggle.com/datasets/doanquanvietnamca/liar-dataset`
+- WELFake dataset: `https://www.kaggle.com/datasets/saurabhshahane/fake-news-classification`
 
 Place raw datasets in:
 
@@ -238,6 +237,25 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
 
 Open `http://localhost:5000` to inspect recorded runs.
+
+## Google Colab
+
+The recommended way to execute the full research pipeline is through `fake_news_detector.ipynb` in Google Colab. This avoids depending on a local GPU or long-running local machine, and uses Google Drive to persist datasets, processed splits, trained models, MLflow data, and experiment outputs between Colab sessions.
+
+The notebook walks through the complete research workflow:
+
+1. Configure repository, branch, project path, and Drive path.
+2. Mount Google Drive.
+3. Clone or update the repository in the Colab runtime.
+4. Install project dependencies.
+5. Create the required Drive folders.
+6. Upload raw datasets and the GloVe embedding file.
+7. Validate inputs and preprocess datasets.
+8. Configure project symlinks between Colab and Drive.
+9. Train models.
+10. Collect web data.
+11. Evaluate trained models on web data.
+12. Analyze and export results.
 
 ## Tests
 
