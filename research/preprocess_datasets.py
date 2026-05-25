@@ -6,6 +6,8 @@ from sklearn.model_selection import train_test_split
 
 BASE = Path(__file__).parent
 RANDOM_STATE = 42
+FAKE_LABEL = 0
+REAL_LABEL = 1
 
 REUTERS_PREFIX = re.compile(r"[A-Z][A-Za-z\s/]+ \(Reuters\)\s*-\s*")
 REUTERS_TAG = re.compile(r"\(Reuters\)")
@@ -29,8 +31,8 @@ def process_isot():
     print("\nISOT")
     true_df = pd.read_csv(BASE / "ISOT" / "True.csv")
     fake_df = pd.read_csv(BASE / "ISOT" / "Fake.csv")
-    true_df["label"] = 0
-    fake_df["label"] = 1
+    true_df["label"] = REAL_LABEL
+    fake_df["label"] = FAKE_LABEL
     df = pd.concat([true_df, fake_df], ignore_index=True)[["text", "label"]]
 
     texts = df["text"].astype(str)
@@ -55,7 +57,7 @@ def process_liar():
         df = pd.read_csv(BASE / "LIAR" / src_name, sep="\t", header=None)
         df = df.rename(columns={1: "orig_label", 2: "text"})
         df = df[df["orig_label"].isin(FAKE_LABELS | REAL_LABELS)].copy()
-        df["label"] = df["orig_label"].apply(lambda x: 1 if x in FAKE_LABELS else 0)
+        df["label"] = df["orig_label"].apply(lambda x: FAKE_LABEL if x in FAKE_LABELS else REAL_LABEL)
         df = df[["text", "label"]].dropna(subset=["text"])
         dst_path = out_dir / dst_name
         df.to_csv(dst_path, index=False)
@@ -65,8 +67,11 @@ def process_liar():
 def process_welfake():
     print("\nWELFake")
     df = pd.read_csv(BASE / "WELFake" / "data.csv")
-    # Keep only text and label columns
     df = df[["text", "label"]]
+    # WELFake uses the opposite convention: 1 = fake, 0 = real.
+    df["label"] = df["label"].map({1: FAKE_LABEL, 0: REAL_LABEL})
+    if df["label"].isna().any():
+        raise ValueError("WELFake contains labels outside the expected {0, 1} set.")
     save_splits(df, BASE / "WELFake")
 
 
