@@ -103,11 +103,12 @@ Full training can require more memory, disk space, and GPU acceleration. The lig
 
 During development, several initial assumptions were refined based on experimental findings. These changes reflect the transition from controlled dataset evaluation to a more robust research pipeline that can test generalization on real-world text.
 
-| Initial assumption | Reality | Mitigation strategy |
-|---|---|---|
-| Training results were sufficient for judging model quality. | High metrics on internal test splits suggested exceptional performance, but also masked possible overfitting to dataset-specific artifacts. | Added a web-scraped evaluation phase to test generalization on truly out-of-distribution data. |
-| Short scraped excerpts would provide enough input features for all classification tasks. | The project datasets have very different text-length profiles, from short claims to full news articles. | Expanded the evaluation pipeline to compare titles, excerpts, and full articles. |
-| Hyperparameters could be tuned effectively through manual trial and error. | Manual tuning was slow, inconsistent, and difficult to reproduce across many model/dataset/embedding combinations. | Implemented automated configuration and optimization with Hydra and Optuna, using `TPESampler` and `MedianPruner`. |
+| Initial assumption | Reality                                                                                                                                                                                                              | Mitigation strategy |
+|---|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---|
+| Training results were sufficient for judging model quality. | High metrics on internal test splits suggested exceptional performance, but also masked possible overfitting to dataset-specific artifacts.                                                                          | Added a web-scraped evaluation phase to test generalization on truly out-of-distribution data. |
+| Short scraped excerpts would provide enough input features for all classification tasks. | The project datasets have very different text-length profiles, from short claims to full news articles.                                                                                                              | Expanded the evaluation pipeline to compare titles, excerpts, and full articles. |
+| The API should use three smart-routing buckets: short, general, and long. | After reviewing the experimental results and deployment behavior, the intermediate `general` route was removed because it did not justify a separate word-count category. The same model was recommended for both texts shorter than 30 words and texts shorter than 100 words. | Simplified runtime routing to two active buckets: `short_text` for texts up to 100 words and `long_article` for texts over 100 words. |
+| Hyperparameters could be tuned effectively through manual trial and error. | Manual tuning was slow, inconsistent, and difficult to reproduce across many model/dataset/embedding combinations.                                                                                                   | Implemented automated configuration and optimization with Hydra and Optuna, using `TPESampler` and `MedianPruner`. |
 
 ## Research Pipeline
 
@@ -372,13 +373,13 @@ python -m research.analyze_results
 
 The API is implemented in `backend/api.py` with FastAPI.
 
-At startup, the FastAPI lifespan handler loads the configured models into `app.state.models`. The current demo configuration loads three routes when matching model artifacts are available:
+At startup, the FastAPI lifespan handler loads the configured models into `app.state.models`. The current demo configuration loads two active routing targets and one fallback model when matching artifacts are available:
 
-| Route key | Dataset | Model | Embedding |
-|---|---|---|---|
-| `short_text` | WELFake | XGBoost | TF-IDF |
-| `general` | ISOT | Random Forest | Bag of Words |
-| `long_article` | LIAR | BiLSTM | GloVe |
+| Route key | Runtime role | Dataset | Model | Embedding |
+|---|---|---|---|---|
+| `short_text` | Active route for texts up to 100 words | WELFake | XGBoost | TF-IDF |
+| `long_article` | Active route for texts over 100 words | LIAR | BiLSTM | GloVe |
+| `general` | Fallback if a preferred route is unavailable | ISOT | Random Forest | Bag of Words |
 
 Main endpoints:
 
@@ -411,11 +412,10 @@ The API selects the best available model based on the number of words in the inp
 
 | Word count | Route key | Dataset | Model | Embedding |
 |---|---|---|---|---|
-| Less than 30 words | `short_text` | WELFake | XGBoost | TF-IDF |
-| 30 to 100 words | `general` | ISOT | Random Forest | Bag of Words |
+| Up to and including 100 words | `short_text` | WELFake | XGBoost | TF-IDF |
 | More than 100 words | `long_article` | LIAR | BiLSTM | GloVe |
 
-If the preferred route is unavailable, the API falls back to `general` or to the first loaded model.
+The original runtime design considered three buckets: `short_text`, `general`, and `long_article`. After reviewing the experiment results and simplifying the deployment behavior, the middle bucket was removed from active routing. The `general` model is still loaded as a safety fallback, so if the preferred route is unavailable, the API falls back to `general` or to the first loaded model.
 
 ## Chrome Extension Layer
 
