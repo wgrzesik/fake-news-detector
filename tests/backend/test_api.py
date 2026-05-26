@@ -31,7 +31,7 @@ def test_predict_short_text_returns_neutral(api_module, fake_request):
     assert body["label"] == "NEUTRAL"
 
 
-def test_predict_uses_short_text_model_for_under_30_words(api_module, fake_request):
+def test_predict_uses_short_text_model_for_up_to_100_words(api_module, fake_request):
     text = "word " * 10
     body = api_module.predict(fake_request, api_module.TextRequest(text=text))
     assert body["label"] == "REAL"
@@ -45,10 +45,16 @@ def test_predict_uses_long_article_model_for_over_100_words(api_module, fake_req
     assert body["meta"]["used_dataset"] == "LIAR"
 
 
-def test_predict_uses_general_model_for_medium_text(api_module, fake_request):
+def test_predict_uses_short_text_model_for_100_words(api_module, fake_request):
+    text = "word " * 100
+    body = api_module.predict(fake_request, api_module.TextRequest(text=text))
+    assert body["meta"]["used_dataset"] == "WELFake"
+
+
+def test_predict_uses_short_text_model_for_previous_medium_text(api_module, fake_request):
     text = "word " * 60
     body = api_module.predict(fake_request, api_module.TextRequest(text=text))
-    assert body["meta"]["used_dataset"] == "ISOT"
+    assert body["meta"]["used_dataset"] == "WELFake"
 
 
 def test_text_request_rejects_oversized_text(api_module):
@@ -70,6 +76,7 @@ def test_select_best_model_threshold_boundaries(api_module):
     models = {"short_text": short, "general": general, "long_article": long_}
 
     assert api_module.select_best_model("a " * 10, models) is short
-    assert api_module.select_best_model("a " * 60, models) is general
+    assert api_module.select_best_model("a " * 100, models) is short
+    assert api_module.select_best_model("a " * 101, models) is long_
     assert api_module.select_best_model("a " * 200, models) is long_
     assert api_module.select_best_model("anything", {}) is None

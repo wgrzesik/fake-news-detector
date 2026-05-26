@@ -26,8 +26,7 @@ MODEL_CONFIGS: Dict[str, Dict[str, str]] = {
     "general":      {"dataset": "ISOT",    "type": "rf",     "emb": "bow"},
 }
 
-SHORT_TEXT_THRESHOLD = 30
-LONG_ARTICLE_THRESHOLD = 100
+TEXT_LENGTH_THRESHOLD = 100
 MIN_TEXT_LENGTH = 10
 MAX_TEXT_LENGTH = 50_000
 
@@ -81,11 +80,9 @@ def select_best_model(text: str, models: Dict[str, ResearchBaseModel]) -> Option
     if not models:
         return None
     word_count = len(text.split())
-    if word_count < SHORT_TEXT_THRESHOLD:
+    if word_count <= TEXT_LENGTH_THRESHOLD:
         return models.get("short_text") or models.get("general") or next(iter(models.values()))
-    if word_count > LONG_ARTICLE_THRESHOLD:
-        return models.get("long_article") or models.get("general") or next(iter(models.values()))
-    return models.get("general") or next(iter(models.values()))
+    return models.get("long_article") or models.get("general") or next(iter(models.values()))
 
 
 @app.get("/health")
