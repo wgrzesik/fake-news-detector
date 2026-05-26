@@ -274,9 +274,14 @@ def run_single_trial_transformer(
             if cached_tokenizer is not None:
                 model.tokenizer = cached_tokenizer
             if cached_model_state is not None:
-                model.transformer_model.load_state_dict(
-                    copy.deepcopy(cached_model_state)
-                )
+                if model_name == "fakebert" and hasattr(model.transformer_model, "bert"):
+                    model.transformer_model.bert.load_state_dict(
+                        copy.deepcopy(cached_model_state)
+                    )
+                else:
+                    model.transformer_model.load_state_dict(
+                        copy.deepcopy(cached_model_state)
+                    )
 
             # Train on raw text with pruning support
             model.train(
@@ -534,9 +539,14 @@ def main(cfg: DictConfig):
                                 embedding_type=embedding_name,
                             )
                             cached_tokenizer = _cache_model.tokenizer
-                            cached_model_state = copy.deepcopy(
-                                _cache_model.transformer_model.state_dict()
-                            )
+                            if model_name == "fakebert" and hasattr(_cache_model.transformer_model, "bert"):
+                                cached_model_state = copy.deepcopy(
+                                    _cache_model.transformer_model.bert.state_dict()
+                                )
+                            else:
+                                cached_model_state = copy.deepcopy(
+                                    _cache_model.transformer_model.state_dict()
+                                )
                             del _cache_model
                             import torch as _torch
                             if _torch.cuda.is_available():
