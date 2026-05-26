@@ -392,6 +392,9 @@ models:
     gradient_accumulation_steps: 2
     scheduler_type: linear
     classifier_dropout: 0.1
+    num_filters: 128
+    cnn_kernel_sizes: [3, 4, 5]
+    dense_units: 128
     freeze_layers: 0
     fp16: true
     save_checkpoints: true
@@ -430,6 +433,12 @@ models:
         type: float
         low: 0.0
         high: 0.3
+      num_filters:
+        type: categorical
+        choices: [64, 128, 256]
+      dense_units:
+        type: categorical
+        choices: [64, 128, 256]
       freeze_layers:
         type: int
         low: 0

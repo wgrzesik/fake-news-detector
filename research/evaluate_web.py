@@ -57,9 +57,13 @@ class WebTestRunner:
             # DL sequence models (lstm/gru/bilstm/cnn) save model.pt + meta.joblib
             has_classifier = (model_dir / "classifier.joblib").exists()
             has_transformer = (model_dir / "transformer").is_dir()
+            has_fakebert_cnn = (model_dir / "fakebert_cnn").is_dir()
             has_dl_model = (model_dir / "model.pt").exists()
-            if not (has_classifier or has_transformer or has_dl_model):
-                print(f"Skipping {model_dir.name} - missing classifier.joblib, transformer/ or model.pt")
+            if not (has_classifier or has_transformer or has_fakebert_cnn or has_dl_model):
+                print(
+                    f"Skipping {model_dir.name} - missing classifier.joblib, "
+                    "transformer/, fakebert_cnn/ or model.pt"
+                )
                 continue
 
             # Extract model name and embedding from directory name
@@ -72,6 +76,13 @@ class WebTestRunner:
 
             model_name = model_info['model']
             embedding_name = model_info['embedding']
+
+            if model_name == "fakebert" and not has_fakebert_cnn:
+                print(
+                    f"Skipping {model_dir.name} - legacy FakeBERT artifacts are not "
+                    "compatible with the CNN-based FakeBERT implementation"
+                )
+                continue
 
             # Apply filters
             if models and model_name not in models:
