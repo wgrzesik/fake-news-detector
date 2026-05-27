@@ -107,7 +107,7 @@ During development, several initial assumptions were refined based on experiment
 |---|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---|
 | Training results were sufficient for judging model quality. | High metrics on internal test splits suggested exceptional performance, but also masked possible overfitting to dataset-specific artifacts.                                                                          | Added a web-scraped evaluation phase to test generalization on truly out-of-distribution data. |
 | Short scraped excerpts would provide enough input features for all classification tasks. | The project datasets have very different text-length profiles, from short claims to full news articles.                                                                                                              | Expanded the evaluation pipeline to compare titles, excerpts, and full articles. |
-| The API should use three smart-routing buckets: short, general, and long. | After reviewing the experimental results and deployment behavior, the intermediate `general` route was removed because it did not justify a separate word-count category. The same model was recommended for both texts shorter than 30 words and texts shorter than 100 words. | Simplified runtime routing to two active buckets: `short_text` for texts up to 100 words and `long_article` for texts over 100 words. |
+| The API should use three smart-routing buckets: short, medium, and long. | After reviewing the experimental results and deployment behavior, the intermediate route was removed because it did not justify a separate word-count category. | Simplified runtime routing to two active buckets: `short_text` for texts up to 100 words and `long_text` for texts over 100 words. |
 | Hyperparameters could be tuned effectively through manual trial and error. | Manual tuning was slow, inconsistent, and difficult to reproduce across many model/dataset/embedding combinations.                                                                                                   | Implemented automated configuration and optimization with Hydra and Optuna, using `TPESampler` and `MedianPruner`. |
 
 ## Research Pipeline
@@ -373,12 +373,12 @@ python -m research.analyze_results
 
 The API is implemented in `backend/api.py` with FastAPI.
 
-At startup, the FastAPI lifespan handler loads the configured models into `app.state.models`. The current demo configuration loads two active routing targets and one fallback model when matching artifacts are available:
+At startup, the FastAPI lifespan handler loads the configured models into `app.state.models`. The current demo configuration loads two routing targets when matching artifacts are available:
 
 | Route key | Runtime role | Dataset | Model | Embedding |
 |---|---|---|---|---|
-| `short_text` | Active route for texts up to 100 words | ISOT | Random Forest | Bag of Words |
-| `long_article` | Active route for texts over 100 words | LIAR | BiLSTM | GloVe |
+| `short_text` | Route for texts up to 100 words | ISOT | Random Forest | Bag of Words |
+| `long_text` | Route for texts over 100 words | LIAR | BiLSTM | GloVe |
 
 Main endpoints:
 
@@ -412,9 +412,9 @@ The API selects the best available model based on the number of words in the inp
 | Word count | Route key | Dataset | Model | Embedding |
 |---|---|---|---|---|
 | Up to and including 100 words | `short_text` | ISOT | Random Forest | Bag of Words |
-| More than 100 words | `long_article` | LIAR | BiLSTM | GloVe |
+| More than 100 words | `long_text` | LIAR | BiLSTM | GloVe |
 
-The original runtime design considered three buckets: `short_text`, `general`, and `long_article`. After reviewing the experiment results and simplifying the deployment behavior, the middle bucket was removed from active routing. The `general` model is still loaded as a safety fallback, so if the preferred route is unavailable, the API falls back to `general` or to the first loaded model.
+The current API uses only these two route keys, selected by the 100-word threshold.
 
 ## Chrome Extension Layer
 

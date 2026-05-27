@@ -17,9 +17,9 @@ When replacing or adding trained models:
 The prediction API currently uses word-count routing:
 
 - texts up to and including 100 words use `short_text`,
-- texts over 100 words use `long_article`.
+- texts over 100 words use `long_text`.
 
-The `general` model is still configured in `backend/api.py`, but it is not an active word-count bucket. It is kept as a fallback if the preferred `short_text` or `long_article` model is unavailable.
+The active model configuration contains only these two route keys. If both model artifacts are missing at startup, the API reports a degraded state and prediction requests return `503`.
 
 If thresholds or selected models change, update:
 

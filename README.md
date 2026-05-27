@@ -133,10 +133,12 @@ Start the backend from the repository root:
 python backend/api.py
 ```
 
-The API loads two active routing targets and one fallback model when matching artifacts are available:
+The API loads two routing targets when matching artifacts are available:
 
 - `short_text`: ISOT + Random Forest + Bag of Words, used for texts up to and including 100 words
-- `long_article`: LIAR + BiLSTM + GloVe, used for texts over 100 words
+- `long_text`: LIAR + BiLSTM + GloVe, used for texts over 100 words
+
+Runtime routing is based on a 100-word threshold and uses only these two categories.
 
 Then load the extension in Chrome:
 
