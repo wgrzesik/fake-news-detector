@@ -23,7 +23,7 @@ def fake_request(models):
 def test_health_returns_loaded_models(api_module, fake_request):
     body = api_module.health(fake_request)
     assert body["status"] == "ok"
-    assert set(body["models_loaded"]) == {"short_text", "long_article", "general"}
+    assert set(body["models_loaded"]) == {"short_text", "long_text"}
 
 
 def test_predict_short_text_returns_neutral(api_module, fake_request):
@@ -35,26 +35,27 @@ def test_predict_uses_short_text_model_for_up_to_100_words(api_module, fake_requ
     text = "word " * 10
     body = api_module.predict(fake_request, api_module.TextRequest(text=text))
     assert body["label"] == "REAL"
-    assert body["meta"]["used_dataset"] == "WELFake"
-    assert body["meta"]["used_model"] == "xgb"
+    assert body["meta"]["used_dataset"] == "ISOT"
+    assert body["meta"]["used_model"] == "rf"
 
 
-def test_predict_uses_long_article_model_for_over_100_words(api_module, fake_request):
+def test_predict_uses_long_text_model_for_over_100_words(api_module, fake_request):
     text = "word " * 150
     body = api_module.predict(fake_request, api_module.TextRequest(text=text))
     assert body["meta"]["used_dataset"] == "LIAR"
+    assert body["meta"]["used_model"] == "bilstm"
 
 
 def test_predict_uses_short_text_model_for_100_words(api_module, fake_request):
     text = "word " * 100
     body = api_module.predict(fake_request, api_module.TextRequest(text=text))
-    assert body["meta"]["used_dataset"] == "WELFake"
+    assert body["meta"]["used_dataset"] == "ISOT"
 
 
 def test_predict_uses_short_text_model_for_previous_medium_text(api_module, fake_request):
     text = "word " * 60
     body = api_module.predict(fake_request, api_module.TextRequest(text=text))
-    assert body["meta"]["used_dataset"] == "WELFake"
+    assert body["meta"]["used_dataset"] == "ISOT"
 
 
 def test_text_request_rejects_oversized_text(api_module):
@@ -71,9 +72,8 @@ def test_predict_503_when_no_models(api_module):
 
 def test_select_best_model_threshold_boundaries(api_module):
     short = type("M", (), {"name": "s"})()
-    general = type("M", (), {"name": "g"})()
     long_ = type("M", (), {"name": "l"})()
-    models = {"short_text": short, "general": general, "long_article": long_}
+    models = {"short_text": short, "long_text": long_}
 
     assert api_module.select_best_model("a " * 10, models) is short
     assert api_module.select_best_model("a " * 100, models) is short

@@ -21,9 +21,8 @@ logger = logging.getLogger("fake_news_api")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 MODEL_CONFIGS: Dict[str, Dict[str, str]] = {
-    "short_text":   {"dataset": "WELFake", "type": "xgb",    "emb": "tfidf"},
-    "long_article": {"dataset": "LIAR",    "type": "bilstm", "emb": "glove"},
-    "general":      {"dataset": "ISOT",    "type": "rf",     "emb": "bow"},
+    "short_text": {"dataset": "ISOT", "type": "rf", "emb": "bow"},
+    "long_text": {"dataset": "LIAR", "type": "bilstm", "emb": "glove"},
 }
 
 TEXT_LENGTH_THRESHOLD = 100
@@ -81,8 +80,8 @@ def select_best_model(text: str, models: Dict[str, ResearchBaseModel]) -> Option
         return None
     word_count = len(text.split())
     if word_count <= TEXT_LENGTH_THRESHOLD:
-        return models.get("short_text") or models.get("general") or next(iter(models.values()))
-    return models.get("long_article") or models.get("general") or next(iter(models.values()))
+        return models.get("short_text") or next(iter(models.values()))
+    return models.get("long_text") or next(iter(models.values()))
 
 
 @app.get("/health")
