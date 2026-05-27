@@ -135,7 +135,7 @@ python backend/api.py
 
 The API loads two active routing targets and one fallback model when matching artifacts are available:
 
-- `short_text`:ISOT + Random Forest + Bag of Words, used for texts up to and including 100 words
+- `short_text`: ISOT + Random Forest + Bag of Words, used for texts up to and including 100 words
 - `long_article`: LIAR + BiLSTM + GloVe, used for texts over 100 words
 - `general`: ISOT + Random Forest + Bag of Words, kept as a fallback if the preferred route is unavailable
 
