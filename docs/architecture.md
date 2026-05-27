@@ -377,9 +377,8 @@ At startup, the FastAPI lifespan handler loads the configured models into `app.s
 
 | Route key | Runtime role | Dataset | Model | Embedding |
 |---|---|---|---|---|
-| `short_text` | Active route for texts up to 100 words | WELFake | XGBoost | TF-IDF |
+| `short_text` | Active route for texts up to 100 words | ISOT | Random Forest | Bag of Words |
 | `long_article` | Active route for texts over 100 words | LIAR | BiLSTM | GloVe |
-| `general` | Fallback if a preferred route is unavailable | ISOT | Random Forest | Bag of Words |
 
 Main endpoints:
 
@@ -412,7 +411,7 @@ The API selects the best available model based on the number of words in the inp
 
 | Word count | Route key | Dataset | Model | Embedding |
 |---|---|---|---|---|
-| Up to and including 100 words | `short_text` | WELFake | XGBoost | TF-IDF |
+| Up to and including 100 words | `short_text` | ISOT | Random Forest | Bag of Words |
 | More than 100 words | `long_article` | LIAR | BiLSTM | GloVe |
 
 The original runtime design considered three buckets: `short_text`, `general`, and `long_article`. After reviewing the experiment results and simplifying the deployment behavior, the middle bucket was removed from active routing. The `general` model is still loaded as a safety fallback, so if the preferred route is unavailable, the API falls back to `general` or to the first loaded model.
