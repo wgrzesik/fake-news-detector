@@ -135,11 +135,8 @@ python backend/api.py
 
 The API loads two active routing targets and one fallback model when matching artifacts are available:
 
-- `short_text`:ISOT + Random Forest + Bag of Words, used for texts up to and including 100 words
+- `short_text`: ISOT + Random Forest + Bag of Words, used for texts up to and including 100 words
 - `long_article`: LIAR + BiLSTM + GloVe, used for texts over 100 words
-- `general`: ISOT + Random Forest + Bag of Words, kept as a fallback if the preferred route is unavailable
-
-An earlier design used three active buckets: `short_text`, `general`, and `long_article`. After reviewing experiment results, the runtime routing was simplified to short vs long text to keep deployment behavior clearer and more consistent with observed model performance.
 
 Then load the extension in Chrome:
 
